@@ -1,6 +1,7 @@
 name: Flutter Windows Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - flutter-v*
