@@ -1,37 +1,69 @@
 import Foundation
 
 enum LyricsService {
+    private static let rateLimiter = LRCLIBRateLimiter()
+
     static func lines(for track: Track) async -> [LyricLine] {
-        if let response = await fetchGet(track) {
-            return response.lines
+        do {
+            if let response = try await fetchGet(track) {
+                return response.lines
+            }
+        } catch {
+            if isCancellation(error) { return [] }
+            return []
         }
 
-        if let response = await fetchSearch(track) {
-            return response.lines
+        if Task.isCancelled {
+            return []
+        }
+
+        do {
+            if let response = try await fetchSearch(track) {
+                return response.lines
+            }
+        } catch {
+            if isCancellation(error) { return [] }
+            return []
         }
 
         return []
     }
 
-    private static func fetchGet(_ track: Track) async -> LRCLibLyrics? {
+    private static func fetchGet(_ track: Track) async throws -> LRCLibLyrics? {
         guard let url = request(path: "/api/get", track: track) else { return nil }
         do {
             let data = try await requestData(from: url)
             return try decodeLyrics(from: data)
         } catch {
+            if isCancellation(error) {
+                throw CancellationError()
+            }
+
+            if case LyricsServiceError.httpStatus(404) = error {
+                return nil
+            }
+
             logError("lyrics get failed: \(error.localizedDescription)")
-            return nil
+            throw error
         }
     }
 
-    private static func fetchSearch(_ track: Track) async -> LRCLibLyrics? {
+    private static func fetchSearch(_ track: Track) async throws -> LRCLibLyrics? {
         guard let url = request(path: "/api/search", track: track) else { return nil }
         do {
             let data = try await requestData(from: url)
             return try decodeSearchResults(from: data)
         } catch {
+            if isCancellation(error) {
+                throw CancellationError()
+            }
+
+            if case LyricsServiceError.httpStatus(404) = error {
+                return nil
+            }
+
             logError("lyrics search failed: \(error.localizedDescription)")
-            return nil
+            throw error
         }
     }
 
@@ -50,15 +82,55 @@ enum LyricsService {
     }
 
     private static func requestData(from url: URL) async throws -> Data {
+        await rateLimiter.acquire()
+        if Task.isCancelled {
+            await rateLimiter.release()
+            throw CancellationError()
+        }
+
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("FloatingLyrics/1.0", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            logError("lyrics http=\(http.statusCode) url=\(url.absoluteString)")
-            throw URLError(.badServerResponse)
+        request.timeoutInterval = 5
+        var released = false
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse {
+                if http.statusCode == 429 {
+                    let retryAfter = RetryAfterParser.delay(from: http.value(forHTTPHeaderField: "Retry-After"))
+                    await rateLimiter.release(retryAfter: retryAfter)
+                    released = true
+                    let retryAfterText = retryAfter.map { String(format: "%.3f", $0) } ?? "nil"
+                    logError("lyrics http=429 retryAfter=\(retryAfterText) url=\(url.absoluteString)")
+                    throw LyricsServiceError.httpStatus(429)
+                }
+
+                if !(200...299).contains(http.statusCode) {
+                    await rateLimiter.release()
+                    released = true
+                    logError("lyrics http=\(http.statusCode) url=\(url.absoluteString)")
+                    throw LyricsServiceError.httpStatus(http.statusCode)
+                }
+            }
+
+            await rateLimiter.release()
+            released = true
+            return data
+        } catch {
+            if isCancellation(error) {
+                if !released {
+                    await rateLimiter.release()
+                }
+                throw CancellationError()
+            }
+
+            if !released {
+                await rateLimiter.release()
+            }
+
+            logError("lyrics request failed: \(error.localizedDescription) url=\(url.absoluteString)")
+            throw error
         }
-        return data
     }
 
     private static func decodeLyrics(from data: Data) throws -> LRCLibLyrics {
@@ -128,6 +200,55 @@ private struct LRCLibLyrics {
     init(syncedLyrics: String?, plainLyrics: String?) {
         self.init(response: LRCLIBResponse(syncedLyrics: syncedLyrics, plainLyrics: plainLyrics))
     }
+}
+
+actor LRCLIBRateLimiter {
+    private let minimumSpacing: TimeInterval = 0.3
+    private var blockedUntil = Date.distantPast
+    private var nextTicket = 0
+    private var servingTicket = 0
+    private var waiters: [Int: CheckedContinuation<Void, Never>] = [:]
+
+    func acquire() async {
+        let ticket = nextTicket
+        nextTicket += 1
+
+        if ticket != servingTicket {
+            await withCheckedContinuation { continuation in
+                waiters[ticket] = continuation
+            }
+        }
+
+        let wait = max(0, blockedUntil.timeIntervalSinceNow)
+        if wait > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+        }
+    }
+
+    func release(retryAfter: TimeInterval? = nil) {
+        let delay = max(minimumSpacing, retryAfter ?? 0)
+        blockedUntil = max(blockedUntil, Date().addingTimeInterval(delay))
+        servingTicket += 1
+
+        if let continuation = waiters.removeValue(forKey: servingTicket) {
+            continuation.resume()
+        }
+    }
+}
+
+enum RetryAfterParser {
+    static func delay(from header: String?) -> TimeInterval? {
+        guard let header else { return nil }
+        return Double(header.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+}
+
+enum LyricsServiceError: Error {
+    case httpStatus(Int)
+}
+
+private func isCancellation(_ error: Error) -> Bool {
+    error is CancellationError || (error as? URLError)?.code == .cancelled
 }
 
 enum LRCParser {

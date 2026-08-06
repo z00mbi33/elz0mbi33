@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var introTask: Task<Void, Never>?
     private var lastTrackIdentity: String?
     private var lastLyricsFetchAt: Date?
-    private let lyricsRetryDelay: TimeInterval = 8
+    private let lyricsRetryDelay: TimeInterval = 2
     private var debugLogURL: URL? {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
