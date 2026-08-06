@@ -1,45 +1,36 @@
 # elz0mbi33
 
-Menu-bar Spotify lyric app for macOS.
+Menu-bar Spotify lyrics app for macOS.
 
-## Features
+## Download
 
-- Live Spotify track detection
-- Synchronized lyrics from LRCLIB
-- Persistent menu-bar lyric text
-- Clickable popover for details and launch-at-login
+Get the latest ready-to-run build from GitHub Releases:
 
-## Requirements
+https://github.com/z00mbi33/elz0mbi33/releases/latest
 
-- macOS 13+
-- Spotify
-- Xcode or Swift 6 toolchain
+Download `elz0mbi33-macos.zip`, unzip it, and move `elz0mbi33.app` to Applications.
 
-## Run locally
+## What it does
 
-```bash
-swift run
-```
+- Shows the current Spotify track in the menu bar
+- Displays synchronized lyrics when LRCLIB has them
+- Opens a popover with track details and launch-at-login
 
-## Build the app bundle
+## Supported macOS
 
-```bash
-./scripts/package-app.sh
-open dist/elz0mbi33.app
-```
+- macOS 13 Ventura or later
+- Apple silicon Macs: supported
+- Intel Macs: supported
 
-## Download a built app
+The release download is a universal app and works on both arm64 and x86_64 Macs.
 
-Tagged releases publish a ready-to-run `.app.zip` on GitHub Releases.
+## First run
 
-```text
-git tag v1.0.0
-git push origin v1.0.0
-```
+- Spotify must be installed and running
+- macOS may ask for permission to control Spotify
+- Lyrics and playback state appear in the menu bar
+- Launch at login can be enabled from the popover
 
-Then download the zip from the Releases page and unzip it.
+## Lyrics source
 
-## Notes
-
-- Grant Spotify automation access when macOS prompts for it.
-- Launch-at-login is available from the popover.
+Lyrics are fetched from LRCLIB.
