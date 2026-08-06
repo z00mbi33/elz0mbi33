@@ -5,6 +5,12 @@
 # App bundle output
 dist/
 
+# Flutter project
+spotify_floating_lyrics_flutter/build/
+spotify_floating_lyrics_flutter/.dart_tool/
+spotify_floating_lyrics_flutter/.packages
+spotify_floating_lyrics_flutter/pubspec.lock
+
 # Logs
 .logs/*.log
 

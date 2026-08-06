@@ -1,0 +1,58 @@
+name: Flutter Windows Release
+
+on:
+  push:
+    tags:
+      - flutter-v*
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build_windows:
+    name: Build Windows ZIP
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Pub get
+        working-directory: spotify_floating_lyrics_flutter
+        run: flutter pub get
+
+      - name: Build Windows
+        working-directory: spotify_floating_lyrics_flutter
+        run: flutter build windows --release
+
+      - name: Package ZIP
+        shell: pwsh
+        working-directory: spotify_floating_lyrics_flutter
+        run: |
+          $releaseDir = "build\windows\x64\runner\Release"
+          if (-not (Test-Path $releaseDir)) {
+            $releaseDir = "build\windows\runner\Release"
+          }
+          $zipPath = "build\windows\elz0mbi33-windows.zip"
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+          Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath $zipPath
+
+      - name: Upload Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "spotify_floating_lyrics_flutter/build/windows/elz0mbi33-windows.zip"
+          allowUpdates: true
+          replacesArtifacts: true
+          artifactErrorsFailBuild: true
+          token: ${{ secrets.GITHUB_TOKEN }}
