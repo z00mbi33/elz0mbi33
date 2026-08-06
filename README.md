@@ -28,6 +28,17 @@ swift run
 open dist/elz0mbi33.app
 ```
 
+## Download a built app
+
+Tagged releases publish a ready-to-run `.app.zip` on GitHub Releases.
+
+```text
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Then download the zip from the Releases page and unzip it.
+
 ## Notes
 
 - Grant Spotify automation access when macOS prompts for it.

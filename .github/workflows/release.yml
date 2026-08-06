@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Package app
+        run: |
+          rm -rf dist
+          mkdir -p dist/elz0mbi33.app/Contents/MacOS
+          mkdir -p dist/elz0mbi33.app/Contents/Resources
+          cp .build/release/elz0mbi33 dist/elz0mbi33.app/Contents/MacOS/elz0mbi33
+          cp Resources/Info.plist dist/elz0mbi33.app/Contents/Info.plist
+          chmod +x dist/elz0mbi33.app/Contents/MacOS/elz0mbi33
+
+      - name: Create zip
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent elz0mbi33.app elz0mbi33-macos.zip
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/elz0mbi33-macos.zip
