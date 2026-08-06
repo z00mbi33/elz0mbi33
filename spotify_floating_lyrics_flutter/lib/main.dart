@@ -60,6 +60,7 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
   Lyrics? _lyrics;
   Timer? _timer;
   bool _dragging = false;
+  bool _connecting = false;
 
   @override
   void initState() {
@@ -88,7 +89,6 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     final clientIdController = TextEditingController(text: prefs.getString(_clientIdKey) ?? '');
-    final clientSecretController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -99,11 +99,6 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
             TextField(
               controller: clientIdController,
               decoration: const InputDecoration(labelText: 'Spotify Client ID'),
-            ),
-            TextField(
-              controller: clientSecretController,
-              decoration: const InputDecoration(labelText: 'Spotify Client Secret'),
-              obscureText: true,
             ),
           ],
         ),
@@ -116,17 +111,41 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
     if (confirmed != true) return;
 
     final clientId = clientIdController.text.trim();
-    final clientSecret = clientSecretController.text.trim();
-    if (clientId.isEmpty || clientSecret.isEmpty) return;
+    if (clientId.isEmpty) {
+      if (!mounted) return;
+      setState(() => _state = const PlaybackState(status: 'Client ID required'));
+      return;
+    }
 
     await prefs.setString(_clientIdKey, clientId);
-    final status = await _auth.login(clientId: clientId, clientSecret: clientSecret);
     if (!mounted) return;
     setState(() {
-      _state = PlaybackState(status: status);
+      _connecting = true;
+      _state = const PlaybackState(status: 'Opening Spotify login…');
       _trackId = null;
       _lyrics = null;
     });
+
+    try {
+      final status = await _auth.login(clientId: clientId);
+      if (!mounted) return;
+      setState(() {
+        _state = PlaybackState(status: status);
+        _trackId = null;
+        _lyrics = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _state = PlaybackState(status: 'Login failed: $error');
+        _trackId = null;
+        _lyrics = null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _connecting = false);
+      }
+    }
   }
 
   @override
@@ -155,8 +174,8 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
                 const Text('elz0mbi33', style: TextStyle(fontWeight: FontWeight.w700)),
                 const Spacer(),
                 TextButton(
-                  onPressed: _login,
-                  child: const Text('Open Spotify'),
+                  onPressed: _connecting ? null : _login,
+                  child: Text(_connecting ? 'Connecting…' : 'Connect Spotify'),
                 ),
                 IconButton(
                   onPressed: () => windowManager.close(),
@@ -210,10 +229,10 @@ class SpotifyAuthManager {
   static const _accessTokenKey = 'spotify_access_token';
   static const _refreshTokenKey = 'spotify_refresh_token';
   static const _expiryKey = 'spotify_access_token_expiry';
-  static const _redirectUri = 'http://localhost:8888/callback';
+  static const _redirectUri = 'http://127.0.0.1:8888/callback';
   static const _scopes = 'user-read-playback-state user-read-currently-playing';
 
-  Future<String> login({required String clientId, required String clientSecret}) async {
+  Future<String> login({required String clientId}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_clientIdKey, clientId);
 
@@ -221,67 +240,86 @@ class SpotifyAuthManager {
     final challenge = base64UrlEncode(sha256.convert(utf8.encode(verifier)).bytes).replaceAll('=', '');
     final state = _randomString(24);
 
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 8888, shared: true);
+    HttpServer? server;
     final callback = Completer<Uri>();
-    server.listen((request) async {
-      final responseState = request.uri.queryParameters['state'];
-      final code = request.uri.queryParameters['code'];
-      request.response.headers.contentType = ContentType.html;
-      if (responseState == state && code != null && code.isNotEmpty) {
-        request.response.write('<html><body>Spotify connected. You can close this tab.</body></html>');
-        callback.complete(request.uri);
-      } else {
-        request.response.statusCode = 400;
-        request.response.write('<html><body>Spotify login failed.</body></html>');
-      }
-      await request.response.close();
-    });
-
-    final authorize = Uri.https('accounts.spotify.com', '/authorize', {
-      'response_type': 'code',
-      'client_id': clientId,
-      'scope': _scopes,
-      'redirect_uri': _redirectUri,
-      'state': state,
-      'code_challenge_method': 'S256',
-      'code_challenge': challenge,
-    });
-    await launchUrl(authorize, mode: LaunchMode.externalApplication);
-
-    final responseUri = await callback.future.timeout(const Duration(minutes: 3));
-    await server.close(force: true);
-    final code = responseUri.queryParameters['code'];
-    if (code == null || code.isEmpty) {
-      return 'Spotify login failed';
+    try {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 8888, shared: true);
+    } on SocketException catch (error) {
+      throw 'localhost port 8888 is busy: ${error.message}';
     }
 
-    final tokenResponse = await http.post(
-      Uri.https('accounts.spotify.com', '/api/token'),
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: {
+    try {
+      server.listen((request) async {
+        final responseState = request.uri.queryParameters['state'];
+        final code = request.uri.queryParameters['code'];
+        final error = request.uri.queryParameters['error'];
+        request.response.headers.contentType = ContentType.html;
+        if (error != null && error.isNotEmpty) {
+          request.response.statusCode = 400;
+          request.response.write('<html><body>Spotify login failed: $error</body></html>');
+          if (!callback.isCompleted) callback.completeError('Spotify login failed: $error');
+        } else if (responseState == state && code != null && code.isNotEmpty) {
+          request.response.write('<html><body>Spotify connected. You can close this tab.</body></html>');
+          if (!callback.isCompleted) callback.complete(request.uri);
+        } else {
+          request.response.statusCode = 400;
+          request.response.write('<html><body>Spotify login failed.</body></html>');
+          if (!callback.isCompleted) callback.completeError('Spotify login failed');
+        }
+        await request.response.close();
+      });
+
+      final authorize = Uri.https('accounts.spotify.com', '/authorize', {
+        'response_type': 'code',
         'client_id': clientId,
-        'client_secret': clientSecret,
-        'grant_type': 'authorization_code',
-        'code': code,
+        'scope': _scopes,
         'redirect_uri': _redirectUri,
-        'code_verifier': verifier,
-      },
-    );
-    if (tokenResponse.statusCode < 200 || tokenResponse.statusCode >= 300) {
-      return 'Spotify login failed';
-    }
+        'state': state,
+        'code_challenge_method': 'S256',
+        'code_challenge': challenge,
+      });
+      final launched = await launchUrl(authorize, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        throw 'could not open the browser';
+      }
 
-    final json = jsonDecode(tokenResponse.body) as Map<String, dynamic>;
-    final accessToken = json['access_token'] as String?;
-    if (accessToken == null || accessToken.isEmpty) {
-      return 'Spotify login failed';
-    }
+      final responseUri = await callback.future.timeout(const Duration(minutes: 3), onTimeout: () {
+        throw 'timed out waiting for Spotify authorization';
+      });
+      final code = responseUri.queryParameters['code'];
+      if (code == null || code.isEmpty) {
+        throw 'missing authorization code';
+      }
 
-    await prefs.setString(_accessTokenKey, accessToken);
-    await prefs.setString(_refreshTokenKey, json['refresh_token'] as String? ?? '');
-    final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
-    await prefs.setInt(_expiryKey, DateTime.now().add(Duration(seconds: expiresIn)).millisecondsSinceEpoch);
-    return 'Spotify connected';
+      final tokenResponse = await http.post(
+        Uri.https('accounts.spotify.com', '/api/token'),
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: {
+          'client_id': clientId,
+          'grant_type': 'authorization_code',
+          'code': code,
+          'redirect_uri': _redirectUri,
+          'code_verifier': verifier,
+        },
+      );
+      if (tokenResponse.statusCode < 200 || tokenResponse.statusCode >= 300) {
+        throw 'token exchange failed (${tokenResponse.statusCode})';
+      }
+
+      final json = jsonDecode(tokenResponse.body) as Map<String, dynamic>;
+      final accessToken = json['access_token'] as String?;
+      if (accessToken == null || accessToken.isEmpty) {
+        throw 'missing access token';
+      }
+
+      await prefs.setString(_accessTokenKey, accessToken);
+      await prefs.setString(_refreshTokenKey, json['refresh_token'] as String? ?? '');
+      final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
+      await prefs.setInt(_expiryKey, DateTime.now().add(Duration(seconds: expiresIn)).millisecondsSinceEpoch);
+      return 'Spotify connected';
+    } finally {
+      await server.close(force: true);
+    }
   }
 
   Future<String?> accessToken() async {
