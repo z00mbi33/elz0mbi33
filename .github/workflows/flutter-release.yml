@@ -2,6 +2,11 @@ name: Flutter Windows Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to publish
+        required: true
+        default: flutter-v1.0.1
   push:
     tags:
       - flutter-v*
@@ -52,6 +57,7 @@ jobs:
       - name: Upload Release
         uses: ncipollo/release-action@v1
         with:
+          tag: ${{ inputs.release_tag || github.ref_name }}
           artifacts: "spotify_floating_lyrics_flutter/build/windows/elz0mbi33-windows.zip"
           allowUpdates: true
           replacesArtifacts: true
