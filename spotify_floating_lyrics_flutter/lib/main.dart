@@ -14,8 +14,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
   const options = WindowOptions(
-    size: Size(420, 180),
-    minimumSize: Size(320, 140),
+    size: Size(520, 280),
+    minimumSize: Size(420, 220),
     center: true,
     backgroundColor: Colors.transparent,
     titleBarStyle: TitleBarStyle.hidden,
@@ -55,16 +55,23 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
   static const _clientIdKey = 'spotify_client_id';
   final _client = SpotifyLyricsClient();
   final _auth = SpotifyAuthManager();
-  PlaybackState _state = const PlaybackState(status: 'Loading…');
+  final _clientIdController = TextEditingController();
+  final _clientIdFocusNode = FocusNode();
+  PlaybackState _state = const PlaybackState(status: 'Connect Spotify');
   String? _trackId;
   Lyrics? _lyrics;
   Timer? _timer;
   bool _dragging = false;
   bool _connecting = false;
+  bool _showLoginForm = true;
 
   @override
   void initState() {
     super.initState();
+    SharedPreferences.getInstance().then((prefs) {
+      if (!mounted) return;
+      _clientIdController.text = prefs.getString(_clientIdKey) ?? '';
+    });
     _load();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _load());
   }
@@ -72,6 +79,8 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
   @override
   void dispose() {
     _timer?.cancel();
+    _clientIdController.dispose();
+    _clientIdFocusNode.dispose();
     super.dispose();
   }
 
@@ -87,33 +96,13 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
 
   Future<void> _login() async {
     final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    final clientIdController = TextEditingController(text: prefs.getString(_clientIdKey) ?? '');
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Connect Spotify'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: clientIdController,
-              decoration: const InputDecoration(labelText: 'Spotify Client ID'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    final clientId = clientIdController.text.trim();
+    final clientId = _clientIdController.text.trim();
     if (clientId.isEmpty) {
       if (!mounted) return;
-      setState(() => _state = const PlaybackState(status: 'Client ID required'));
+      setState(() {
+        _state = const PlaybackState(status: 'Client ID required');
+        _showLoginForm = true;
+      });
       return;
     }
 
@@ -121,6 +110,7 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
     if (!mounted) return;
     setState(() {
       _connecting = true;
+      _showLoginForm = true;
       _state = const PlaybackState(status: 'Opening Spotify login…');
       _trackId = null;
       _lyrics = null;
@@ -131,6 +121,7 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
       if (!mounted) return;
       setState(() {
         _state = PlaybackState(status: status);
+        _showLoginForm = false;
         _trackId = null;
         _lyrics = null;
       });
@@ -138,6 +129,7 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
       if (!mounted) return;
       setState(() {
         _state = PlaybackState(status: 'Login failed: $error');
+        _showLoginForm = true;
         _trackId = null;
         _lyrics = null;
       });
@@ -153,6 +145,11 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
     final body = _state.track == null
         ? _state.status
         : _state.lyric ?? _state.status;
+    final showLoginForm = _showLoginForm ||
+        _state.status == 'Connect Spotify' ||
+        _state.status == 'Client ID required' ||
+        _state.status == 'Opening Spotify login…' ||
+        _state.status.startsWith('Login failed');
     return GestureDetector(
       onPanStart: (_) => _dragging = true,
       onPanUpdate: (_) {
@@ -174,7 +171,12 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
                 const Text('elz0mbi33', style: TextStyle(fontWeight: FontWeight.w700)),
                 const Spacer(),
                 TextButton(
-                  onPressed: _connecting ? null : _login,
+                  onPressed: _connecting
+                      ? null
+                      : () {
+                          setState(() => _showLoginForm = true);
+                          _clientIdFocusNode.requestFocus();
+                        },
                   child: Text(_connecting ? 'Connecting…' : 'Connect Spotify'),
                 ),
                 IconButton(
@@ -201,6 +203,40 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
                 fontWeight: FontWeight.w700,
               ),
             ),
+            if (showLoginForm) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _clientIdController,
+                focusNode: _clientIdFocusNode,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Spotify Client ID',
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (_) => _connecting ? null : _login(),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: _connecting
+                        ? null
+                        : () {
+                            setState(() {
+                              _showLoginForm = false;
+                              _state = const PlaybackState(status: 'Connect Spotify');
+                            });
+                          },
+                    child: const Text('Cancel'),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: _connecting ? null : _login,
+                    child: Text(_connecting ? 'Connecting…' : 'Continue'),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
