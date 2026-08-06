@@ -22,8 +22,8 @@ jobs:
           rm -rf dist
           mkdir -p dist/elz0mbi33.app/Contents/MacOS
           mkdir -p dist/elz0mbi33.app/Contents/Resources
-          ditto .build/release-arm64/elz0mbi33 dist/elz0mbi33.app/Contents/MacOS/elz0mbi33-arm64
-          ditto .build/release-x86_64/elz0mbi33 dist/elz0mbi33.app/Contents/MacOS/elz0mbi33-x86_64
+          cp $(swift build -c release --arch arm64 --build-path .build/release-arm64 --show-bin-path)/elz0mbi33 dist/elz0mbi33.app/Contents/MacOS/elz0mbi33-arm64
+          cp $(swift build -c release --arch x86_64 --build-path .build/release-x86_64 --show-bin-path)/elz0mbi33 dist/elz0mbi33.app/Contents/MacOS/elz0mbi33-x86_64
           lipo -create dist/elz0mbi33.app/Contents/MacOS/elz0mbi33-arm64 dist/elz0mbi33.app/Contents/MacOS/elz0mbi33-x86_64 -output dist/elz0mbi33.app/Contents/MacOS/elz0mbi33
           rm dist/elz0mbi33.app/Contents/MacOS/elz0mbi33-arm64 dist/elz0mbi33.app/Contents/MacOS/elz0mbi33-x86_64
           cp Resources/Info.plist dist/elz0mbi33.app/Contents/Info.plist
