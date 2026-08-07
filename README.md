@@ -32,3 +32,9 @@ flutter run -d windows
 2. Add this redirect URI:
    - `http://127.0.0.1:8888/callback`
 3. Click **Connect Spotify** in the app.
+
+## Notes
+
+- Spotify Premium may be required for playback-state access.
+- Lyrics depend on LRCLIB availability.
+- If lyrics are unavailable, the app shows a fallback status and retries later.

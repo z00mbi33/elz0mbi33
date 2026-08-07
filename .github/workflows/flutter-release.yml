@@ -49,6 +49,41 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ inputs.release_tag || github.ref_name }}
+          body: |
+            ## elz0mbi33 v1.1
+
+            A lightweight floating Spotify lyrics app for macOS and Windows.
+
+            ### Highlights
+
+            - Always-on-top floating lyrics window
+            - Visible across macOS Spaces and full-screen apps
+            - Spotify PKCE authentication
+            - Synchronized lyrics from LRCLIB
+            - Responsive compact layout
+            - Clear fallback when lyrics are unavailable
+            - macOS dependency cleanup and Swift Package Manager support
+
+            ### Download
+
+            - `elz0mbi33-macos.zip` — macOS
+            - `elz0mbi33-windows.zip` — Windows
+
+            ### Setup
+
+            1. Create a Spotify developer application.
+            2. Add this redirect URI:
+
+               `http://127.0.0.1:8888/callback`
+
+            3. Launch elz0mbi33 and select **Connect Spotify**.
+            4. Enter your Spotify Client ID and complete authorization in the browser.
+
+            ### Notes
+
+            - Spotify Premium may be required for playback-state access.
+            - Lyrics depend on LRCLIB availability.
+            - If lyrics are unavailable, the app displays a fallback status and retries later.
           artifacts: build/macos/elz0mbi33-macos.zip
           allowUpdates: true
           replacesArtifacts: true
@@ -93,6 +128,41 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ inputs.release_tag || github.ref_name }}
+          body: |
+            ## elz0mbi33 v1.1
+
+            A lightweight floating Spotify lyrics app for macOS and Windows.
+
+            ### Highlights
+
+            - Always-on-top floating lyrics window
+            - Visible across macOS Spaces and full-screen apps
+            - Spotify PKCE authentication
+            - Synchronized lyrics from LRCLIB
+            - Responsive compact layout
+            - Clear fallback when lyrics are unavailable
+            - macOS dependency cleanup and Swift Package Manager support
+
+            ### Download
+
+            - `elz0mbi33-macos.zip` — macOS
+            - `elz0mbi33-windows.zip` — Windows
+
+            ### Setup
+
+            1. Create a Spotify developer application.
+            2. Add this redirect URI:
+
+               `http://127.0.0.1:8888/callback`
+
+            3. Launch elz0mbi33 and select **Connect Spotify**.
+            4. Enter your Spotify Client ID and complete authorization in the browser.
+
+            ### Notes
+
+            - Spotify Premium may be required for playback-state access.
+            - Lyrics depend on LRCLIB availability.
+            - If lyrics are unavailable, the app displays a fallback status and retries later.
           artifacts: build/windows/elz0mbi33-windows.zip
           allowUpdates: true
           replacesArtifacts: true
