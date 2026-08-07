@@ -6,10 +6,10 @@ on:
       release_tag:
         description: Release tag to publish
         required: true
-        default: flutter-v2.0.0
+        default: v1.1
   push:
     tags:
-      - flutter-v*
+      - v*
 
 permissions:
   contents: write
@@ -19,6 +19,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build_macos:
+    name: Build macOS ZIP
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Enable Swift Package Manager
+        run: flutter config --enable-swift-package-manager
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Build macOS
+        run: flutter build macos --release
+
+      - name: Package ZIP
+        run: |
+          cd build/macos/Build/Products/Release
+          zip -r ../../../elz0mbi33-macos.zip elz0mbi33.app
+
+      - name: Upload Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ inputs.release_tag || github.ref_name }}
+          artifacts: build/macos/elz0mbi33-macos.zip
+          allowUpdates: true
+          replacesArtifacts: true
+          artifactErrorsFailBuild: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   build_windows:
     name: Build Windows ZIP
     runs-on: windows-latest
@@ -30,6 +66,9 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+
+      - name: Enable Swift Package Manager
+        run: flutter config --enable-swift-package-manager
 
       - name: Pub get
         run: flutter pub get

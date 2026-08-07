@@ -13,9 +13,9 @@ import 'package:window_manager/window_manager.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
-  const options = WindowOptions(
-    size: Size(400, 180),
-    minimumSize: Size(340, 140),
+  final options = WindowOptions(
+    size: Size(360, 150),
+    minimumSize: Size(300, 120),
     center: true,
     backgroundColor: Colors.transparent,
     titleBarStyle: TitleBarStyle.hidden,
@@ -25,6 +25,12 @@ void main() async {
     await windowManager.show();
     await windowManager.focus();
     await windowManager.setAlwaysOnTop(true);
+    if (Platform.isMacOS) {
+      await windowManager.setVisibleOnAllWorkspaces(
+        true,
+        visibleOnFullScreen: true,
+      );
+    }
   });
   runApp(const Elz0mbi33App());
 }
@@ -36,9 +42,9 @@ class Elz0mbi33App extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(useMaterial3: true).copyWith(
-        scaffoldBackgroundColor: Colors.transparent,
-      ),
+      theme: ThemeData.dark(
+        useMaterial3: true,
+      ).copyWith(scaffoldBackgroundColor: Colors.transparent),
       home: const FloatingLyricsView(),
     );
   }
@@ -107,7 +113,11 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
     if (_loading) return;
     _loading = true;
     try {
-      final next = await _client.snapshot(auth: _auth, currentTrackId: _trackId, cachedLyrics: _lyrics);
+      final next = await _client.snapshot(
+        auth: _auth,
+        currentTrackId: _trackId,
+        cachedLyrics: _lyrics,
+      );
       if (!mounted) return;
       setState(() {
         _state = next.state;
@@ -135,16 +145,16 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
     if (_loginPendingSize) return;
     _loginPendingSize = true;
     try {
-      await windowManager.setSize(const Size(460, 280));
-      await windowManager.setMinimumSize(const Size(380, 220));
+      await windowManager.setSize(const Size(440, 248));
+      await windowManager.setMinimumSize(const Size(360, 208));
     } finally {
       _loginPendingSize = false;
     }
   }
 
   Future<void> _setPlayerWindowSize() async {
-    await windowManager.setSize(const Size(360, 160));
-    await windowManager.setMinimumSize(const Size(340, 140));
+    await windowManager.setSize(const Size(340, 140));
+    await windowManager.setMinimumSize(const Size(300, 120));
   }
 
   Future<void> _login() async {
@@ -203,27 +213,36 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
 
   @override
   Widget build(BuildContext context) {
-    final body = _state.track == null ? _state.status : _state.lyric ?? _state.status;
+    final body = _state.track == null
+        ? _state.status
+        : _state.lyric ?? _state.status;
     final statusText = _state.track == null ? (_loginError ?? body) : body;
     final paused = _state.isPaused;
     final trackLabel = _state.track == null
         ? 'Spotify not connected'
-        : paused
-            ? '${_state.track} (paused)'
-            : _state.track!;
-    final showLoginForm = _authChecked && (_showLoginForm ||
-        _state.status == 'Client ID required' ||
-        _state.status == 'Opening Spotify login…' ||
-        _state.status.startsWith('Login failed'));
+        : _state.track!;
+    final showLoginForm =
+        _authChecked &&
+        (_showLoginForm ||
+            _state.status == 'Client ID required' ||
+            _state.status == 'Opening Spotify login…' ||
+            _state.status.startsWith('Login failed'));
 
     return Material(
       type: MaterialType.transparency,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < 420 || constraints.maxHeight < 200;
-          final titleSize = compact ? 14.0 : 16.0;
-          final lyricSize = compact ? 18.0 : 22.0;
-          final innerPadding = compact ? 12.0 : 16.0;
+          final scale = min(
+            (constraints.maxWidth / 360).clamp(0.85, 1.15),
+            (constraints.maxHeight / 150).clamp(0.85, 1.15),
+          );
+          final lyricSize = 16.0 * scale;
+          final innerPadding = 10.0 * scale;
+          final gap = 6.0 * scale;
+          final radius = 16.0 * scale;
+          final footerSize = 11.5 * scale;
+          final textColor = const Color(0xFFF4EEDF);
+          final mutedTextColor = const Color(0xFFD8D0C2);
 
           return GestureDetector(
             onPanStart: (_) => _dragging = true,
@@ -234,8 +253,8 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
             child: SizedBox.expand(
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0x98111111),
-                  borderRadius: BorderRadius.circular(20),
+                  color: const Color(0xFF0B1D3A),
+                  borderRadius: BorderRadius.circular(radius),
                   border: Border.all(color: Colors.white12),
                 ),
                 padding: EdgeInsets.all(innerPadding),
@@ -243,123 +262,178 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.max,
                   children: [
-                    Row(
-                      children: [
-                        const Spacer(),
-                        if (!_authChecked || !_authenticated)
-                          FilledButton.tonal(
-                            onPressed: _connecting
-                                ? null
-                                : () {
-                                    setState(() => _showLoginForm = true);
-                                    _clientIdFocusNode.requestFocus();
-                                    _setLoginWindowSize();
-                                  },
-                            child: Text(_connecting ? 'Connecting…' : 'Connect'),
-                          ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: () => windowManager.close(),
-                          icon: const Icon(Icons.close, size: 18),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: compact ? 8 : 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            trackLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: titleSize, fontWeight: FontWeight.w600, decoration: TextDecoration.none),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: compact ? 2 : 4),
                     Expanded(
-                      child: Align(
-                        alignment: showLoginForm ? Alignment.topLeft : Alignment.centerLeft,
-                        child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                statusText,
-                                maxLines: showLoginForm ? 2 : 3,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: lyricSize,
-                                  color: _state.lyric == null ? Colors.white70 : Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  decoration: TextDecoration.none,
-                                ),
-                              ),
-                              if (paused && !showLoginForm) ...[
-                                SizedBox(height: compact ? 6 : 8),
-                                Text(
-                                  'Paused',
-                                  style: TextStyle(
-                                    fontSize: compact ? 12 : 13,
-                                    color: Colors.white54,
-                                    fontWeight: FontWeight.w600,
-                                    decoration: TextDecoration.none,
-                                  ),
-                                ),
-                              ],
-                              if (showLoginForm) ...[
-                                SizedBox(height: compact ? 10 : 12),
-                                TextField(
-                                  controller: _clientIdController,
-                                  focusNode: _clientIdFocusNode,
-                                  autofocus: true,
-                                  decoration: InputDecoration(
-                                    labelText: 'Spotify Client ID',
-                                    filled: true,
-                                    fillColor: Colors.white.withValues(alpha: 0.06),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(color: Colors.white24),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(color: Colors.white70),
-                                    ),
-                                  ),
-                                  onSubmitted: (_) => _connecting ? null : _login(),
-                                ),
-                                SizedBox(height: compact ? 8 : 10),
-                                Row(
+                      child: LayoutBuilder(
+                        builder: (context, lyricConstraints) {
+                          final lyricTopOffset = showLoginForm
+                              ? 0.0
+                              : lyricConstraints.maxHeight * 0.2;
+                          return SingleChildScrollView(
+                            child: Padding(
+                              padding: EdgeInsets.only(top: lyricTopOffset),
+                              child: Align(
+                                alignment: showLoginForm
+                                    ? Alignment.topLeft
+                                    : Alignment.topCenter,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: showLoginForm
+                                      ? CrossAxisAlignment.start
+                                      : CrossAxisAlignment.center,
                                   children: [
-                                    TextButton(
-                                      onPressed: _connecting
-                                          ? null
-                                          : () {
-                                              setState(() {
-                                                _showLoginForm = false;
-                                                _loginError = null;
-                                                _state = const PlaybackState(status: 'Connect Spotify');
-                                              });
-                                              _setPlayerWindowSize();
-                                            },
-                                      child: const Text('Cancel', style: TextStyle(decoration: TextDecoration.none)),
+                                    Text(
+                                      statusText,
+                                      maxLines: showLoginForm ? 2 : 3,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: showLoginForm
+                                          ? TextAlign.start
+                                          : TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: lyricSize,
+                                        color: _state.lyric == null
+                                            ? mutedTextColor
+                                            : textColor,
+                                        fontWeight: FontWeight.w700,
+                                        decoration: TextDecoration.none,
+                                      ),
                                     ),
-                                    const Spacer(),
-                                    FilledButton(
-                                      onPressed: _connecting ? null : _login,
-                                      child: Text(_connecting ? 'Connecting…' : 'Continue'),
-                                    ),
+                                    if (paused && !showLoginForm) ...[
+                                      SizedBox(height: gap),
+                                      Text(
+                                        'Paused',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 11.0 * scale,
+                                          color: mutedTextColor,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: TextDecoration.none,
+                                        ),
+                                      ),
+                                    ],
+                                    if (showLoginForm) ...[
+                                      SizedBox(height: gap + 4),
+                                      TextField(
+                                        controller: _clientIdController,
+                                        focusNode: _clientIdFocusNode,
+                                        autofocus: true,
+                                        style: TextStyle(color: textColor),
+                                        decoration: InputDecoration(
+                                          labelText: 'Spotify Client ID',
+                                          labelStyle: TextStyle(
+                                            color: mutedTextColor,
+                                          ),
+                                          filled: true,
+                                          fillColor: Colors.white.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            borderSide: const BorderSide(
+                                              color: Colors.white24,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            borderSide: const BorderSide(
+                                              color: Colors.white70,
+                                            ),
+                                          ),
+                                        ),
+                                        onSubmitted: (_) =>
+                                            _connecting ? null : _login(),
+                                      ),
+                                      SizedBox(height: gap + 2),
+                                      Row(
+                                        children: [
+                                          TextButton(
+                                            onPressed: _connecting
+                                                ? null
+                                                : () {
+                                                    setState(() {
+                                                      _showLoginForm = false;
+                                                      _loginError = null;
+                                                      _state =
+                                                          const PlaybackState(
+                                                            status:
+                                                                'Connect Spotify',
+                                                          );
+                                                    });
+                                                    _setPlayerWindowSize();
+                                                  },
+                                            child: Text(
+                                              'Cancel',
+                                              style: TextStyle(
+                                                color: mutedTextColor,
+                                                decoration: TextDecoration.none,
+                                              ),
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          FilledButton(
+                                            onPressed: _connecting
+                                                ? null
+                                                : _login,
+                                            child: Text(
+                                              _connecting
+                                                  ? 'Connecting…'
+                                                  : 'Continue',
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ],
                                 ),
-                              ],
-                            ],
-                          ),
-                        ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
+                    if (!showLoginForm) ...[
+                      SizedBox(height: gap),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              trackLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: footerSize,
+                                fontWeight: FontWeight.w600,
+                                color: mutedTextColor,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ),
+                          if (_authChecked && !_authenticated) ...[
+                            const SizedBox(width: 8),
+                            FilledButton.tonal(
+                              onPressed: _connecting
+                                  ? null
+                                  : () {
+                                      setState(() => _showLoginForm = true);
+                                      _clientIdFocusNode.requestFocus();
+                                      _setLoginWindowSize();
+                                    },
+                              child: Text(
+                                _connecting ? 'Connecting…' : 'Connect',
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -377,7 +451,12 @@ class PlaybackState {
   final String? lyric;
   final bool? isPlaying;
 
-  const PlaybackState({required this.status, this.track, this.lyric, this.isPlaying});
+  const PlaybackState({
+    required this.status,
+    this.track,
+    this.lyric,
+    this.isPlaying,
+  });
 
   bool get isPaused => track != null && isPlaying == false;
 }
@@ -403,13 +482,19 @@ class SpotifyAuthManager {
     await prefs.setString(_clientIdKey, clientId);
 
     final verifier = _randomString(96);
-    final challenge = base64UrlEncode(sha256.convert(utf8.encode(verifier)).bytes).replaceAll('=', '');
+    final challenge = base64UrlEncode(
+      sha256.convert(utf8.encode(verifier)).bytes,
+    ).replaceAll('=', '');
     final state = _randomString(24);
 
     HttpServer? server;
     final callback = Completer<Uri>();
     try {
-      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 8888, shared: true);
+      server = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        8888,
+        shared: true,
+      );
     } on SocketException catch (error) {
       throw 'localhost port 8888 is busy: ${error.message}';
     }
@@ -422,21 +507,43 @@ class SpotifyAuthManager {
         request.response.headers.contentType = ContentType.html;
         if (error != null && error.isNotEmpty) {
           request.response.statusCode = 400;
-          final errorDescription = request.uri.queryParameters['error_description'];
-          final message = (errorDescription != null && errorDescription.isNotEmpty) ? '$error: $errorDescription' : error;
-          request.response.write('<html><body>Spotify login failed: $message</body></html>');
-          if (!callback.isCompleted) callback.completeError('Spotify login failed: $message');
+          final errorDescription =
+              request.uri.queryParameters['error_description'];
+          final message =
+              (errorDescription != null && errorDescription.isNotEmpty)
+              ? '$error: $errorDescription'
+              : error;
+          request.response.write(
+            '<html><body>Spotify login failed: $message</body></html>',
+          );
+          if (!callback.isCompleted) {
+            callback.completeError('Spotify login failed: $message');
+          }
         } else if (request.uri.path != '/callback') {
           request.response.statusCode = 404;
-          request.response.write('<html><body>Unexpected callback path.</body></html>');
-          if (!callback.isCompleted) callback.completeError('unexpected callback path: ${request.uri.path}');
+          request.response.write(
+            '<html><body>Unexpected callback path.</body></html>',
+          );
+          if (!callback.isCompleted) {
+            callback.completeError(
+              'unexpected callback path: ${request.uri.path}',
+            );
+          }
         } else if (responseState == state && code != null && code.isNotEmpty) {
-          request.response.write('<html><body>Spotify authorization received. You can close this tab.</body></html>');
-          if (!callback.isCompleted) callback.complete(request.uri);
+          request.response.write(
+            '<html><body>Spotify authorization received. You can close this tab.</body></html>',
+          );
+          if (!callback.isCompleted) {
+            callback.complete(request.uri);
+          }
         } else {
           request.response.statusCode = 400;
-          request.response.write('<html><body>Spotify login failed.</body></html>');
-          if (!callback.isCompleted) callback.completeError('Spotify login failed: invalid callback');
+          request.response.write(
+            '<html><body>Spotify login failed.</body></html>',
+          );
+          if (!callback.isCompleted) {
+            callback.completeError('Spotify login failed: invalid callback');
+          }
         }
         await request.response.close();
       });
@@ -450,14 +557,20 @@ class SpotifyAuthManager {
         'code_challenge_method': 'S256',
         'code_challenge': challenge,
       });
-      final launched = await launchUrl(authorize, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(
+        authorize,
+        mode: LaunchMode.externalApplication,
+      );
       if (!launched) {
         throw 'could not open the browser';
       }
 
-      final responseUri = await callback.future.timeout(const Duration(minutes: 3), onTimeout: () {
-        throw 'timed out waiting for Spotify authorization';
-      });
+      final responseUri = await callback.future.timeout(
+        const Duration(minutes: 3),
+        onTimeout: () {
+          throw 'timed out waiting for Spotify authorization';
+        },
+      );
       final code = responseUri.queryParameters['code'];
       if (code == null || code.isEmpty) {
         throw 'missing authorization code';
@@ -485,9 +598,15 @@ class SpotifyAuthManager {
       }
 
       await prefs.setString(_accessTokenKey, accessToken);
-      await prefs.setString(_refreshTokenKey, json['refresh_token'] as String? ?? '');
+      await prefs.setString(
+        _refreshTokenKey,
+        json['refresh_token'] as String? ?? '',
+      );
       final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
-      await prefs.setInt(_expiryKey, DateTime.now().add(Duration(seconds: expiresIn)).millisecondsSinceEpoch);
+      await prefs.setInt(
+        _expiryKey,
+        DateTime.now().add(Duration(seconds: expiresIn)).millisecondsSinceEpoch,
+      );
       return 'Spotify connected';
     } finally {
       await server.close(force: true);
@@ -504,7 +623,10 @@ class SpotifyAuthManager {
 
     final refreshToken = prefs.getString(_refreshTokenKey);
     final clientId = prefs.getString(_clientIdKey);
-    if (refreshToken == null || refreshToken.isEmpty || clientId == null || clientId.isEmpty) {
+    if (refreshToken == null ||
+        refreshToken.isEmpty ||
+        clientId == null ||
+        clientId.isEmpty) {
       return token;
     }
 
@@ -525,22 +647,33 @@ class SpotifyAuthManager {
 
     await prefs.setString(_accessTokenKey, next);
     final expiresIn = (body['expires_in'] as num?)?.toInt() ?? 3600;
-    await prefs.setInt(_expiryKey, DateTime.now().add(Duration(seconds: expiresIn)).millisecondsSinceEpoch);
+    await prefs.setInt(
+      _expiryKey,
+      DateTime.now().add(Duration(seconds: expiresIn)).millisecondsSinceEpoch,
+    );
     return next;
   }
 
   String _randomString(int length) {
-    const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~';
+    const alphabet =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~';
     final random = Random.secure();
-    return List.generate(length, (_) => alphabet[random.nextInt(alphabet.length)]).join();
+    return List.generate(
+      length,
+      (_) => alphabet[random.nextInt(alphabet.length)],
+    ).join();
   }
 }
 
 class SpotifyLyricsClient {
   final Map<String, Lyrics> _lyricsCache = {};
   final Set<String> _loadingTracks = {};
+  final Map<String, int> _lyricsFailures = {};
+  final Map<String, DateTime> _nextLyricsRetry = {};
   VoidCallback? onLyricsReady;
   final _rateLimiter = LRCLIBRateLimiter();
+  static const _maxLyricsFailures = 3;
+  static const _lyricsRetryDelay = Duration(seconds: 15);
 
   Future<PlaybackSnapshot> snapshot({
     required SpotifyAuthManager auth,
@@ -549,7 +682,9 @@ class SpotifyLyricsClient {
   }) async {
     final token = await auth.accessToken();
     if (token == null || token.isEmpty) {
-      return const PlaybackSnapshot(state: PlaybackState(status: 'Connect Spotify'));
+      return const PlaybackSnapshot(
+        state: PlaybackState(status: 'Connect Spotify'),
+      );
     }
 
     try {
@@ -558,31 +693,46 @@ class SpotifyLyricsClient {
         headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 204) {
-        return const PlaybackSnapshot(state: PlaybackState(status: 'No track playing'));
+        return const PlaybackSnapshot(
+          state: PlaybackState(status: 'No track playing'),
+        );
       }
       if (response.statusCode == 401) {
-        return const PlaybackSnapshot(state: PlaybackState(status: 'Connect Spotify'));
+        return const PlaybackSnapshot(
+          state: PlaybackState(status: 'Connect Spotify'),
+        );
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        return const PlaybackSnapshot(state: PlaybackState(status: 'Lyrics unavailable'));
+        return const PlaybackSnapshot(
+          state: PlaybackState(status: 'Lyrics unavailable'),
+        );
       }
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final item = data['item'] as Map<String, dynamic>?;
       if (item == null) {
-        return const PlaybackSnapshot(state: PlaybackState(status: 'No track playing'));
+        return const PlaybackSnapshot(
+          state: PlaybackState(status: 'No track playing'),
+        );
       }
 
       final title = item['name'] as String? ?? '';
       final trackId = item['id'] as String?;
-      final artists = (item['artists'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final artist = artists.isNotEmpty ? (artists.first['name'] as String? ?? '') : '';
+      final artists =
+          (item['artists'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final artist = artists.isNotEmpty
+          ? (artists.first['name'] as String? ?? '')
+          : '';
       final track = '$artist — $title'.trim();
       final playing = data['is_playing'] as bool? ?? false;
       final progress = (data['progress_ms'] as num?)?.toDouble() ?? 0;
       if (trackId == null || trackId.isEmpty) {
         return PlaybackSnapshot(
-          state: PlaybackState(status: 'Lyrics unavailable', track: track, isPlaying: playing),
+          state: PlaybackState(
+            status: 'Lyrics unavailable',
+            track: track,
+            isPlaying: playing,
+          ),
         );
       }
 
@@ -590,11 +740,33 @@ class SpotifyLyricsClient {
           ? cachedLyrics
           : _lyricsCache[trackId];
       if (lyrics != null && lyrics.lines.isNotEmpty) {
-        final current = lyrics.currentLine(progressMs: progress) ?? 'Loading lyrics…';
+        _clearLyricsRetryState(trackId);
+        final current =
+            lyrics.currentLine(progressMs: progress) ?? 'Loading lyrics…';
         return PlaybackSnapshot(
-          state: PlaybackState(status: current, track: track, lyric: current, isPlaying: playing),
+          state: PlaybackState(
+            status: current,
+            track: track,
+            lyric: current,
+            isPlaying: playing,
+          ),
           trackId: trackId,
           lyrics: lyrics,
+        );
+      }
+
+      final failures = _lyricsFailures[trackId] ?? 0;
+      final nextRetryAt = _nextLyricsRetry[trackId];
+      if (failures >= _maxLyricsFailures &&
+          nextRetryAt != null &&
+          DateTime.now().isBefore(nextRetryAt)) {
+        return PlaybackSnapshot(
+          state: PlaybackState(
+            status: 'No lyrics available',
+            track: track,
+            isPlaying: playing,
+          ),
+          trackId: trackId,
         );
       }
 
@@ -603,28 +775,62 @@ class SpotifyLyricsClient {
       }
 
       return PlaybackSnapshot(
-        state: PlaybackState(status: 'Loading lyrics…', track: track, isPlaying: playing),
+        state: PlaybackState(
+          status: 'Loading lyrics…',
+          track: track,
+          isPlaying: playing,
+        ),
         trackId: trackId,
       );
     } catch (_) {
-      return const PlaybackSnapshot(state: PlaybackState(status: 'Connect Spotify'));
+      return const PlaybackSnapshot(
+        state: PlaybackState(status: 'Connect Spotify'),
+      );
     }
   }
 
-  Future<void> _primeLyrics({required String trackId, required String title, required String artist}) async {
+  Future<void> _primeLyrics({
+    required String trackId,
+    required String title,
+    required String artist,
+  }) async {
     try {
       final lyrics = await _fetchLyrics(title: title, artist: artist);
       if (lyrics != null && lyrics.lines.isNotEmpty) {
         _lyricsCache[trackId] = lyrics;
+        _clearLyricsRetryState(trackId);
         onLyricsReady?.call();
+      } else {
+        _recordLyricsFailure(trackId);
       }
     } finally {
       _loadingTracks.remove(trackId);
     }
   }
 
-  Future<Lyrics?> _fetchLyrics({required String title, required String artist}) async {
-    final get = await _fetchLyricsEndpoint('/api/get', title: title, artist: artist);
+  void _clearLyricsRetryState(String trackId) {
+    _lyricsFailures.remove(trackId);
+    _nextLyricsRetry.remove(trackId);
+  }
+
+  void _recordLyricsFailure(String trackId) {
+    final failures = (_lyricsFailures[trackId] ?? 0) + 1;
+    _lyricsFailures[trackId] = failures;
+    if (failures >= _maxLyricsFailures) {
+      _nextLyricsRetry[trackId] = DateTime.now().add(_lyricsRetryDelay);
+      onLyricsReady?.call();
+    }
+  }
+
+  Future<Lyrics?> _fetchLyrics({
+    required String title,
+    required String artist,
+  }) async {
+    final get = await _fetchLyricsEndpoint(
+      '/api/get',
+      title: title,
+      artist: artist,
+    );
     if (get != null) return get;
     return _fetchLyricsEndpoint('/api/search', title: title, artist: artist);
   }
@@ -635,8 +841,13 @@ class SpotifyLyricsClient {
     required String artist,
   }) async {
     await _rateLimiter.acquire();
-    final uri = Uri.https('lrclib.net', path, {'track_name': title, 'artist_name': artist});
-    final response = await http.get(uri, headers: {'Accept': 'application/json'}).timeout(const Duration(seconds: 5));
+    final uri = Uri.https('lrclib.net', path, {
+      'track_name': title,
+      'artist_name': artist,
+    });
+    final response = await http
+        .get(uri, headers: {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 5));
     if (response.statusCode == 404) {
       return null;
     }
