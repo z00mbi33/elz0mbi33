@@ -3,6 +3,12 @@
 build/
 .flutter-plugins-dependencies
 
+# macOS generated files
+macos/Flutter/ephemeral/
+macos/Pods/
+macos/Podfile
+macos/Podfile.lock
+
 # macOS / Xcode
 DerivedData/
 *.xcuserstate

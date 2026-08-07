@@ -18,6 +18,7 @@ let package = Package(
         .package(name: "screen_retriever_macos", path: "../.packages/screen_retriever_macos-0.2.2"),
         .package(name: "shared_preferences_foundation", path: "../.packages/shared_preferences_foundation-2.5.6"),
         .package(name: "url_launcher_macos", path: "../.packages/url_launcher_macos-3.2.5"),
+        .package(name: "window_manager", path: "../.packages/window_manager-0.5.2"),
         .package(name: "FlutterFramework", path: "../.packages/FlutterFramework")
     ],
     targets: [
@@ -27,6 +28,7 @@ let package = Package(
                 .product(name: "screen-retriever-macos", package: "screen_retriever_macos"),
                 .product(name: "shared-preferences-foundation", package: "shared_preferences_foundation"),
                 .product(name: "url-launcher-macos", package: "url_launcher_macos"),
+                .product(name: "window-manager", package: "window_manager"),
                 .product(name: "FlutterFramework", package: "FlutterFramework")
             ]
         )

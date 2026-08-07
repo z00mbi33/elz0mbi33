@@ -5,6 +5,8 @@ class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
+    level = .floating
+    collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     isOpaque = false
     backgroundColor = .clear
     titlebarAppearsTransparent = true
