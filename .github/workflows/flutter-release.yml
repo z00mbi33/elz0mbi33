@@ -1,4 +1,4 @@
-name: Flutter Windows Release
+name: Flutter Release
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       release_tag:
         description: Release tag to publish
         required: true
-        default: flutter-v1.0.1
+        default: flutter-v2.0.0
   push:
     tags:
       - flutter-v*
@@ -22,7 +22,6 @@ jobs:
   build_windows:
     name: Build Windows ZIP
     runs-on: windows-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,16 +32,13 @@ jobs:
           channel: stable
 
       - name: Pub get
-        working-directory: spotify_floating_lyrics_flutter
         run: flutter pub get
 
       - name: Build Windows
-        working-directory: spotify_floating_lyrics_flutter
         run: flutter build windows --release
 
       - name: Package ZIP
         shell: pwsh
-        working-directory: spotify_floating_lyrics_flutter
         run: |
           $releaseDir = "build\windows\x64\runner\Release"
           if (-not (Test-Path $releaseDir)) {
@@ -58,7 +54,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ inputs.release_tag || github.ref_name }}
-          artifacts: "spotify_floating_lyrics_flutter/build/windows/elz0mbi33-windows.zip"
+          artifacts: build/windows/elz0mbi33-windows.zip
           allowUpdates: true
           replacesArtifacts: true
           artifactErrorsFailBuild: true

@@ -1,36 +1,22 @@
 # elz0mbi33
 
-Menu-bar Spotify lyrics app for macOS.
+Floating Spotify lyrics app built with Flutter.
 
-## Download
+## Releases
 
-Get the latest ready-to-run build from GitHub Releases:
+- Windows ZIP: GitHub Releases
+- macOS ZIP: GitHub Releases
 
-https://github.com/z00mbi33/elz0mbi33/releases/latest
+## Run locally
 
-Download `elz0mbi33-macos.zip`, unzip it, and move `elz0mbi33.app` to Applications.
+```bash
+flutter pub get
+flutter run -d macos
+```
 
-## What it does
+## Spotify setup
 
-- Shows the current Spotify track in the menu bar
-- Displays synchronized lyrics when LRCLIB has them
-- Opens a popover with track details and launch-at-login
-
-## Supported macOS
-
-- macOS 13 Ventura or later
-- Apple silicon Macs: supported
-- Intel Macs: supported
-
-The release download is a universal app and works on both arm64 and x86_64 Macs.
-
-## First run
-
-- Spotify must be installed and running
-- macOS may ask for permission to control Spotify
-- Lyrics and playback state appear in the menu bar
-- Launch at login can be enabled from the popover
-
-## Lyrics source
-
-Lyrics are fetched from LRCLIB.
+1. Create a Spotify developer app.
+2. Add this redirect URI:
+   - `http://127.0.0.1:8888/callback`
+3. Click **Connect Spotify** in the app.

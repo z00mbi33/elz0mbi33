@@ -1,32 +1,16 @@
-# Swift Package Manager
-.build/
-.swiftpm/
+# Flutter
+.dart_tool/
+build/
+.flutter-plugins-dependencies
 
-# App bundle output
-dist/
-
-# Flutter project
-spotify_floating_lyrics_flutter/build/
-spotify_floating_lyrics_flutter/.dart_tool/
-spotify_floating_lyrics_flutter/.packages
-spotify_floating_lyrics_flutter/pubspec.lock
-
-# Logs
-.logs/*.log
-
-# Xcode
+# macOS / Xcode
 DerivedData/
-*.xcworkspace/xcuserdata/
-*.xcodeproj/xcuserdata/
 *.xcuserstate
-
-# macOS
 .DS_Store
 
 # Editors
-.vscode/
 .idea/
+.vscode/
 
-# Temp files
-*.swp
-*.tmp
+# Logs
+.logs/*.log
