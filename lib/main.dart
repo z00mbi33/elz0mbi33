@@ -14,8 +14,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
   final options = WindowOptions(
-    size: Size(360, 150),
-    minimumSize: Size(300, 120),
+    size: Size(380, 160),
+    minimumSize: Size(360, 150),
     center: true,
     backgroundColor: Colors.transparent,
     titleBarStyle: TitleBarStyle.hidden,
@@ -255,8 +255,8 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
       child: LayoutBuilder(
         builder: (context, constraints) {
           final scale = min(
-            (constraints.maxWidth / 360).clamp(0.85, 1.15),
-            (constraints.maxHeight / 150).clamp(0.85, 1.15),
+            (constraints.maxWidth / 380).clamp(0.85, 1.15),
+            (constraints.maxHeight / 160).clamp(0.85, 1.15),
           );
           final lyricSize = 16.0 * scale;
           final innerPadding = 10.0 * scale;
@@ -279,201 +279,275 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
               if (_dragging) windowManager.startDragging();
             },
             onPanEnd: (_) => _dragging = false,
-            child: SizedBox.expand(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0B1D3A),
-                  borderRadius: BorderRadius.circular(radius),
-                  border: Border.all(color: Colors.white12),
-                ),
-                padding: EdgeInsets.all(innerPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, lyricConstraints) {
-                          final lyricTopOffset = showLoginForm
-                              ? 0.0
-                              : lyricConstraints.maxHeight * 0.2;
-                          return SingleChildScrollView(
-                            child: Padding(
-                              padding: EdgeInsets.only(top: lyricTopOffset),
-                              child: Align(
-                                alignment: showLoginForm
-                                    ? Alignment.topLeft
-                                    : Alignment.topCenter,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: showLoginForm
-                                      ? CrossAxisAlignment.start
-                                      : CrossAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      statusText,
-                                      maxLines: showLoginForm ? 2 : 3,
-                                      overflow: TextOverflow.ellipsis,
-                                      textAlign: showLoginForm
-                                          ? TextAlign.start
-                                          : TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: lyricSize,
-                                        color: _state.lyric == null
-                                            ? mutedTextColor
-                                            : textColor,
-                                        fontWeight: FontWeight.w700,
-                                        decoration: TextDecoration.none,
-                                        shadows: textShadows,
-                                      ),
-                                    ),
-                                    if (paused && !showLoginForm) ...[
-                                      SizedBox(height: gap),
-                                      Text(
-                                        'Paused',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 11.0 * scale,
-                                          color: mutedTextColor,
-                                          fontWeight: FontWeight.w600,
-                                          decoration: TextDecoration.none,
-                                          shadows: textShadows,
-                                        ),
-                                      ),
-                                    ],
-                                    if (showLoginForm) ...[
-                                      SizedBox(height: gap + 4),
-                                      TextField(
-                                        controller: _clientIdController,
-                                        focusNode: _clientIdFocusNode,
-                                        autofocus: true,
-                                        style: TextStyle(color: textColor),
-                                        decoration: InputDecoration(
-                                          labelText: 'Spotify Client ID',
-                                          labelStyle: TextStyle(
-                                            color: mutedTextColor,
-                                          ),
-                                          filled: true,
-                                          fillColor: Colors.white.withValues(
-                                            alpha: 0.08,
-                                          ),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: const BorderSide(
-                                              color: Colors.white24,
-                                            ),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: const BorderSide(
-                                              color: Colors.white70,
-                                            ),
+            child: Stack(
+              children: [
+                SizedBox.expand(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0B1D3A),
+                      borderRadius: BorderRadius.circular(radius),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    padding: EdgeInsets.all(innerPadding),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, lyricConstraints) {
+                              final lyricTopOffset = showLoginForm
+                                  ? 0.0
+                                  : lyricConstraints.maxHeight * 0.2;
+                              return SingleChildScrollView(
+                                child: Padding(
+                                  padding: EdgeInsets.only(top: lyricTopOffset),
+                                  child: Align(
+                                    alignment: showLoginForm
+                                        ? Alignment.topLeft
+                                        : Alignment.topCenter,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: showLoginForm
+                                          ? CrossAxisAlignment.start
+                                          : CrossAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          statusText,
+                                          maxLines: showLoginForm ? 2 : 3,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: showLoginForm
+                                              ? TextAlign.start
+                                              : TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: lyricSize,
+                                            color: _state.lyric == null
+                                                ? mutedTextColor
+                                                : textColor,
+                                            fontWeight: FontWeight.w700,
+                                            decoration: TextDecoration.none,
+                                            shadows: textShadows,
                                           ),
                                         ),
-                                        onSubmitted: (_) =>
-                                            _connecting ? null : _login(),
-                                      ),
-                                      SizedBox(height: gap + 2),
-                                      Row(
-                                        children: [
-                                          TextButton(
-                                            onPressed: _connecting
-                                                ? null
-                                                : () {
-                                                    setState(() {
-                                                      _showLoginForm = false;
-                                                      _loginError = null;
-                                                      _state =
-                                                          const PlaybackState(
-                                                            status:
-                                                                'Connect Spotify',
-                                                          );
-                                                    });
-                                                    _setPlayerWindowSize();
-                                                  },
-                                            child: Text(
-                                              'Cancel',
-                                              style: TextStyle(
-                                                color: mutedTextColor,
-                                                decoration: TextDecoration.none,
-                                              ),
-                                            ),
-                                          ),
-                                          const Spacer(),
-                                          FilledButton(
-                                            onPressed: _connecting
-                                                ? null
-                                                : _login,
-                                            child: Text(
-                                              _connecting
-                                                  ? 'Connecting…'
-                                                  : 'Continue',
+                                        if (paused && !showLoginForm) ...[
+                                          SizedBox(height: gap),
+                                          Text(
+                                            'Paused',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 11.0 * scale,
+                                              color: mutedTextColor,
+                                              fontWeight: FontWeight.w600,
+                                              decoration: TextDecoration.none,
+                                              shadows: textShadows,
                                             ),
                                           ),
                                         ],
-                                      ),
-                                    ],
-                                  ],
+                                        if (showLoginForm) ...[
+                                          SizedBox(height: gap + 4),
+                                          TextField(
+                                            controller: _clientIdController,
+                                            focusNode: _clientIdFocusNode,
+                                            autofocus: true,
+                                            style: TextStyle(color: textColor),
+                                            decoration: InputDecoration(
+                                              labelText: 'Spotify Client ID',
+                                              labelStyle: TextStyle(
+                                                color: mutedTextColor,
+                                              ),
+                                              filled: true,
+                                              fillColor: Colors.white.withValues(
+                                                alpha: 0.08,
+                                              ),
+                                              border: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              enabledBorder: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                borderSide: const BorderSide(
+                                                  color: Colors.white24,
+                                                ),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                borderSide: const BorderSide(
+                                                  color: Colors.white70,
+                                                ),
+                                              ),
+                                            ),
+                                            onSubmitted: (_) =>
+                                                _connecting ? null : _login(),
+                                          ),
+                                          SizedBox(height: gap + 2),
+                                          Row(
+                                            children: [
+                                              TextButton(
+                                                onPressed: _connecting
+                                                    ? null
+                                                    : () {
+                                                        setState(() {
+                                                          _showLoginForm =
+                                                              false;
+                                                          _loginError = null;
+                                                          _state =
+                                                              const PlaybackState(
+                                                                status:
+                                                                    'Connect Spotify',
+                                                              );
+                                                        });
+                                                        _setPlayerWindowSize();
+                                                      },
+                                                child: Text(
+                                                  'Cancel',
+                                                  style: TextStyle(
+                                                    color: mutedTextColor,
+                                                    decoration:
+                                                        TextDecoration.none,
+                                                  ),
+                                                ),
+                                              ),
+                                              const Spacer(),
+                                              FilledButton(
+                                                onPressed: _connecting
+                                                    ? null
+                                                    : _login,
+                                                child: Text(
+                                                  _connecting
+                                                      ? 'Connecting…'
+                                                      : 'Continue',
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        if (!showLoginForm) ...[
+                          SizedBox(height: gap),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  trackLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: footerSize,
+                                    fontWeight: FontWeight.w600,
+                                    color: mutedTextColor,
+                                    decoration: TextDecoration.none,
+                                    shadows: textShadows,
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    if (!showLoginForm) ...[
-                      SizedBox(height: gap),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              trackLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: footerSize,
-                                fontWeight: FontWeight.w600,
-                                color: mutedTextColor,
-                                decoration: TextDecoration.none,
-                                shadows: textShadows,
-                              ),
-                            ),
+                              if (_authChecked && !_authenticated) ...[
+                                const SizedBox(width: 8),
+                                FilledButton.tonal(
+                                  onPressed: _connecting
+                                      ? null
+                                      : () {
+                                          setState(() => _showLoginForm = true);
+                                          _clientIdFocusNode.requestFocus();
+                                          _setLoginWindowSize();
+                                        },
+                                  child: Text(
+                                    _connecting ? 'Connecting…' : 'Connect',
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                          if (_authChecked && !_authenticated) ...[
-                            const SizedBox(width: 8),
-                            FilledButton.tonal(
-                              onPressed: _connecting
-                                  ? null
-                                  : () {
-                                      setState(() => _showLoginForm = true);
-                                      _clientIdFocusNode.requestFocus();
-                                      _setLoginWindowSize();
-                                    },
-                              child: Text(
-                                _connecting ? 'Connecting…' : 'Connect',
-                              ),
-                            ),
-                          ],
                         ],
-                      ),
-                    ],
-                  ],
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+                Positioned(
+                  top: 2,
+                  right: 2,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'More options',
+                        icon: const Icon(Icons.more_horiz),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _connecting ? null : _showOptions,
+                      ),
+                      if (Platform.isWindows)
+                        IconButton(
+                          tooltip: 'Close',
+                          icon: const Icon(Icons.close),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: _connecting ? null : _closeWindow,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           );
         },
       ),
     );
+  }
+
+  Future<void> _showOptions() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Options'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.refresh),
+              title: const Text('Reconnect Spotify'),
+              onTap: () async {
+                Navigator.of(context).pop();
+                await _reconnectSpotify();
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reconnectSpotify() async {
+    await _auth.clearSession();
+    if (!mounted) return;
+    setState(() {
+      _authenticated = false;
+      _showLoginForm = true;
+      _loginError = null;
+      _state = const PlaybackState(status: 'Connect Spotify');
+      _trackId = null;
+      _lyrics = null;
+    });
+    await _setLoginWindowSize();
+    _clientIdFocusNode.requestFocus();
+  }
+
+  Future<void> _closeWindow() async {
+    await windowManager.close();
   }
 }
 
