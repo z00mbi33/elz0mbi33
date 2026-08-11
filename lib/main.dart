@@ -477,11 +477,15 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(
-                        tooltip: 'More options',
-                        icon: const Icon(Icons.more_horiz),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: _connecting ? null : _showOptions,
+                      Builder(
+                        builder: (buttonContext) => IconButton(
+                          tooltip: 'More options',
+                          icon: const Icon(Icons.more_horiz),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: _connecting
+                              ? null
+                              : () => _showOptions(buttonContext),
+                        ),
                       ),
                       if (Platform.isWindows)
                         IconButton(
@@ -501,10 +505,10 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
     );
   }
 
-  Future<void> _showOptions() async {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+  Future<void> _showOptions(BuildContext buttonContext) async {
+    final overlay = Overlay.of(buttonContext).context.findRenderObject() as RenderBox?;
     if (overlay == null) return;
-    final box = context.findRenderObject() as RenderBox?;
+    final box = buttonContext.findRenderObject() as RenderBox?;
     if (box == null) return;
 
     final selected = await showMenu<String>(
