@@ -11,8 +11,6 @@ class MainFlutterWindow: NSWindow {
     backgroundColor = .clear
     titlebarAppearsTransparent = true
     self.contentViewController = flutterViewController
-    contentView?.wantsLayer = true
-    contentView?.layer?.backgroundColor = NSColor.clear.cgColor
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)

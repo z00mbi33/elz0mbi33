@@ -24,6 +24,7 @@ void main() async {
   windowManager.waitUntilReadyToShow(options, () async {
     await windowManager.show();
     await windowManager.focus();
+    await windowManager.setOpacity(0.82);
     await windowManager.setAlwaysOnTop(true);
     if (Platform.isMacOS) {
       await windowManager.setVisibleOnAllWorkspaces(
@@ -243,6 +244,13 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
           final footerSize = 11.5 * scale;
           final textColor = const Color(0xFFF4EEDF);
           final mutedTextColor = const Color(0xFFD8D0C2);
+          final textShadows = [
+            Shadow(
+              color: Colors.black.withValues(alpha: 0.75),
+              blurRadius: 8,
+              offset: const Offset(0, 1),
+            ),
+          ];
 
           return GestureDetector(
             onPanStart: (_) => _dragging = true,
@@ -295,6 +303,7 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
                                             : textColor,
                                         fontWeight: FontWeight.w700,
                                         decoration: TextDecoration.none,
+                                        shadows: textShadows,
                                       ),
                                     ),
                                     if (paused && !showLoginForm) ...[
@@ -307,6 +316,7 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
                                           color: mutedTextColor,
                                           fontWeight: FontWeight.w600,
                                           decoration: TextDecoration.none,
+                                          shadows: textShadows,
                                         ),
                                       ),
                                     ],
@@ -413,6 +423,7 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
                                 fontWeight: FontWeight.w600,
                                 color: mutedTextColor,
                                 decoration: TextDecoration.none,
+                                shadows: textShadows,
                               ),
                             ),
                           ),
