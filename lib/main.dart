@@ -502,33 +502,39 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
   }
 
   Future<void> _showOptions() async {
-    await showDialog<void>(
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
+
+    final selected = await showMenu<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Options'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.refresh),
-              title: const Text('Reconnect Spotify'),
-              onTap: () async {
-                Navigator.of(context).pop();
-                await _reconnectSpotify();
-              },
-            ),
-          ],
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(
+          box.localToGlobal(Offset.zero, ancestor: overlay).dx,
+          box.localToGlobal(Offset.zero, ancestor: overlay).dy,
+          box.size.width,
+          box.size.height,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
+        Offset.zero & overlay.size,
       ),
+      items: const [
+        PopupMenuItem<String>(
+          value: 'reconnect',
+          child: Row(
+            children: [
+              Icon(Icons.refresh),
+              SizedBox(width: 8),
+              Text('Reconnect Spotify'),
+            ],
+          ),
+        ),
+      ],
     );
+
+    if (selected == 'reconnect') {
+      await _reconnectSpotify();
+    }
   }
 
   Future<void> _reconnectSpotify() async {
