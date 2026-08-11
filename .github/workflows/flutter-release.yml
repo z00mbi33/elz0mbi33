@@ -6,7 +6,7 @@ on:
       release_tag:
         description: Release tag to publish
         required: true
-        default: v1.1.0
+        default: v1.1.1
   push:
     tags:
       - v*
@@ -50,7 +50,7 @@ jobs:
         with:
           tag: ${{ inputs.release_tag || github.ref_name }}
           body: |
-            ## elz0mbi33 v1.1.0
+            ## elz0mbi33 v1.1.1
 
             A lightweight floating Spotify lyrics app for macOS and Windows.
 
@@ -60,6 +60,7 @@ jobs:
             - Visible across macOS Spaces and full-screen apps
             - Spotify PKCE authentication
             - Windows auth recovery after sleep and stale token refresh
+            - Windows close button and popup options menu
             - Synchronized lyrics from LRCLIB
             - Responsive compact layout
             - Clear fallback when lyrics are unavailable
@@ -130,7 +131,7 @@ jobs:
         with:
           tag: ${{ inputs.release_tag || github.ref_name }}
           body: |
-            ## elz0mbi33 v1.1.0
+            ## elz0mbi33 v1.1.1
 
             A lightweight floating Spotify lyrics app for macOS and Windows.
 
@@ -140,6 +141,7 @@ jobs:
             - Visible across macOS Spaces and full-screen apps
             - Spotify PKCE authentication
             - Windows auth recovery after sleep and stale token refresh
+            - Windows close button and popup options menu
             - Synchronized lyrics from LRCLIB
             - Responsive compact layout
             - Clear fallback when lyrics are unavailable
