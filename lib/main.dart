@@ -58,7 +58,8 @@ class FloatingLyricsView extends StatefulWidget {
   State<FloatingLyricsView> createState() => FloatingLyricsViewState();
 }
 
-class FloatingLyricsViewState extends State<FloatingLyricsView> {
+class FloatingLyricsViewState extends State<FloatingLyricsView>
+    with WidgetsBindingObserver {
   static const _clientIdKey = 'spotify_client_id';
   final _client = SpotifyLyricsClient();
   final _auth = SpotifyAuthManager();
@@ -79,8 +80,16 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
   String? _loginError;
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshNow());
+    }
+  }
+
+  @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _client.onLyricsReady = _refreshNow;
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;
@@ -91,18 +100,19 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
   }
 
   Future<void> _bootstrap() async {
-    final token = await _auth.accessToken();
+    final session = await _auth.accessToken();
     if (!mounted) return;
     setState(() {
       _authChecked = true;
-      _authenticated = token != null;
-      _showLoginForm = token == null;
+      _authenticated = session.authenticated;
+      _showLoginForm = session.needsLogin;
     });
     await _load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _client.onLyricsReady = null;
     _clientIdController.dispose();
@@ -124,6 +134,17 @@ class FloatingLyricsViewState extends State<FloatingLyricsView> {
         _state = next.state;
         _trackId = next.trackId;
         _lyrics = next.lyrics;
+        if (next.needsLogin == true) {
+          _authenticated = false;
+          _showLoginForm = true;
+          _loginError = null;
+          _trackId = null;
+          _lyrics = null;
+        } else if (next.authenticated == true) {
+          _authenticated = true;
+          _showLoginForm = false;
+          _loginError = null;
+        }
       });
     } finally {
       _loading = false;
@@ -476,8 +497,37 @@ class PlaybackSnapshot {
   final PlaybackState state;
   final String? trackId;
   final Lyrics? lyrics;
+  final bool? needsLogin;
+  final bool? authenticated;
 
-  const PlaybackSnapshot({required this.state, this.trackId, this.lyrics});
+  const PlaybackSnapshot({
+    required this.state,
+    this.trackId,
+    this.lyrics,
+    this.needsLogin,
+    this.authenticated,
+  });
+}
+
+class SpotifyAccessTokenResult {
+  final String? token;
+  final bool authenticated;
+  final bool needsLogin;
+
+  const SpotifyAccessTokenResult._(
+    this.token,
+    this.authenticated,
+    this.needsLogin,
+  );
+
+  const SpotifyAccessTokenResult.authenticated(String token)
+      : this._(token, true, false);
+
+  const SpotifyAccessTokenResult.needsLogin()
+      : this._(null, false, true);
+
+  const SpotifyAccessTokenResult.unavailable()
+      : this._(null, false, false);
 }
 
 class SpotifyAuthManager {
@@ -487,6 +537,14 @@ class SpotifyAuthManager {
   static const _expiryKey = 'spotify_access_token_expiry';
   static const _redirectUri = 'http://127.0.0.1:8888/callback';
   static const _scopes = 'user-read-playback-state user-read-currently-playing';
+  static const _tokenTimeout = Duration(seconds: 10);
+
+  Future<void> clearSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_accessTokenKey);
+    await prefs.remove(_refreshTokenKey);
+    await prefs.remove(_expiryKey);
+  }
 
   Future<String> login({required String clientId}) async {
     final prefs = await SharedPreferences.getInstance();
@@ -587,7 +645,8 @@ class SpotifyAuthManager {
         throw 'missing authorization code';
       }
 
-      final tokenResponse = await http.post(
+      final tokenResponse = await http
+          .post(
         Uri.https('accounts.spotify.com', '/api/token'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
@@ -597,7 +656,8 @@ class SpotifyAuthManager {
           'redirect_uri': _redirectUri,
           'code_verifier': verifier,
         },
-      );
+      )
+          .timeout(_tokenTimeout);
       if (tokenResponse.statusCode < 200 || tokenResponse.statusCode >= 300) {
         throw 'token exchange failed (${tokenResponse.statusCode}): ${tokenResponse.body}';
       }
@@ -609,10 +669,10 @@ class SpotifyAuthManager {
       }
 
       await prefs.setString(_accessTokenKey, accessToken);
-      await prefs.setString(
-        _refreshTokenKey,
-        json['refresh_token'] as String? ?? '',
-      );
+      final refreshToken = json['refresh_token'] as String?;
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await prefs.setString(_refreshTokenKey, refreshToken);
+      }
       final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
       await prefs.setInt(
         _expiryKey,
@@ -624,45 +684,70 @@ class SpotifyAuthManager {
     }
   }
 
-  Future<String?> accessToken() async {
+  Future<SpotifyAccessTokenResult> accessToken() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(_accessTokenKey);
-    if (token == null || token.isEmpty) return null;
+    if (token != null && token.isNotEmpty) {
+      final expiry = prefs.getInt(_expiryKey) ?? 0;
+      if (DateTime.now().millisecondsSinceEpoch < expiry - 30000) {
+        return SpotifyAccessTokenResult.authenticated(token);
+      }
+    }
 
-    final expiry = prefs.getInt(_expiryKey) ?? 0;
-    if (DateTime.now().millisecondsSinceEpoch < expiry - 30000) return token;
-
-    final refreshToken = prefs.getString(_refreshTokenKey);
     final clientId = prefs.getString(_clientIdKey);
+    final refreshToken = prefs.getString(_refreshTokenKey);
     if (refreshToken == null ||
         refreshToken.isEmpty ||
         clientId == null ||
         clientId.isEmpty) {
-      return token;
+      await clearSession();
+      return const SpotifyAccessTokenResult.needsLogin();
     }
 
-    final response = await http.post(
-      Uri.https('accounts.spotify.com', '/api/token'),
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: {
-        'client_id': clientId,
-        'grant_type': 'refresh_token',
-        'refresh_token': refreshToken,
-      },
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) return token;
+    try {
+      final response = await http
+          .post(
+        Uri.https('accounts.spotify.com', '/api/token'),
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: {
+          'client_id': clientId,
+          'grant_type': 'refresh_token',
+          'refresh_token': refreshToken,
+        },
+      )
+          .timeout(_tokenTimeout);
+      if (response.statusCode == 400 || response.statusCode == 401) {
+        await clearSession();
+        return const SpotifyAccessTokenResult.needsLogin();
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return const SpotifyAccessTokenResult.unavailable();
+      }
 
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final next = body['access_token'] as String?;
-    if (next == null || next.isEmpty) return token;
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final next = body['access_token'] as String?;
+      if (next == null || next.isEmpty) {
+        return const SpotifyAccessTokenResult.unavailable();
+      }
 
-    await prefs.setString(_accessTokenKey, next);
-    final expiresIn = (body['expires_in'] as num?)?.toInt() ?? 3600;
-    await prefs.setInt(
-      _expiryKey,
-      DateTime.now().add(Duration(seconds: expiresIn)).millisecondsSinceEpoch,
-    );
-    return next;
+      await prefs.setString(_accessTokenKey, next);
+      final rotatedRefreshToken = body['refresh_token'] as String?;
+      if (rotatedRefreshToken != null && rotatedRefreshToken.isNotEmpty) {
+        await prefs.setString(_refreshTokenKey, rotatedRefreshToken);
+      }
+      final expiresIn = (body['expires_in'] as num?)?.toInt() ?? 3600;
+      await prefs.setInt(
+        _expiryKey,
+        DateTime.now().add(Duration(seconds: expiresIn)).millisecondsSinceEpoch,
+      );
+      return SpotifyAccessTokenResult.authenticated(next);
+    } on TimeoutException {
+      return const SpotifyAccessTokenResult.unavailable();
+    } on SocketException {
+      return const SpotifyAccessTokenResult.unavailable();
+    } on http.ClientException {
+      return const SpotifyAccessTokenResult.unavailable();
+    }
   }
 
   String _randomString(int length) {
@@ -685,37 +770,56 @@ class SpotifyLyricsClient {
   final _rateLimiter = LRCLIBRateLimiter();
   static const _maxLyricsFailures = 3;
   static const _lyricsRetryDelay = Duration(seconds: 15);
+  static const _spotifyTimeout = Duration(seconds: 8);
 
   Future<PlaybackSnapshot> snapshot({
     required SpotifyAuthManager auth,
     required String? currentTrackId,
     required Lyrics? cachedLyrics,
   }) async {
-    final token = await auth.accessToken();
-    if (token == null || token.isEmpty) {
+    final session = await auth.accessToken();
+    if (session.needsLogin) {
       return const PlaybackSnapshot(
         state: PlaybackState(status: 'Connect Spotify'),
+        needsLogin: true,
+        authenticated: false,
+      );
+    }
+    final token = session.token;
+    if (token == null || token.isEmpty) {
+      return const PlaybackSnapshot(
+        state: PlaybackState(status: 'Spotify unavailable'),
+        authenticated: false,
       );
     }
 
     try {
-      final response = await http.get(
+      final response = await http
+          .get(
         Uri.parse('https://api.spotify.com/v1/me/player/currently-playing'),
         headers: {'Authorization': 'Bearer $token'},
-      );
+      )
+          .timeout(_spotifyTimeout);
       if (response.statusCode == 204) {
         return const PlaybackSnapshot(
           state: PlaybackState(status: 'No track playing'),
+          needsLogin: false,
+          authenticated: true,
         );
       }
       if (response.statusCode == 401) {
+        await auth.clearSession();
         return const PlaybackSnapshot(
           state: PlaybackState(status: 'Connect Spotify'),
+          needsLogin: true,
+          authenticated: false,
         );
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return const PlaybackSnapshot(
           state: PlaybackState(status: 'Lyrics unavailable'),
+          needsLogin: false,
+          authenticated: true,
         );
       }
 
@@ -724,6 +828,8 @@ class SpotifyLyricsClient {
       if (item == null) {
         return const PlaybackSnapshot(
           state: PlaybackState(status: 'No track playing'),
+          needsLogin: false,
+          authenticated: true,
         );
       }
 
@@ -744,6 +850,8 @@ class SpotifyLyricsClient {
             track: track,
             isPlaying: playing,
           ),
+          needsLogin: false,
+          authenticated: true,
         );
       }
 
@@ -778,6 +886,8 @@ class SpotifyLyricsClient {
             isPlaying: playing,
           ),
           trackId: trackId,
+          needsLogin: false,
+          authenticated: true,
         );
       }
 
@@ -792,10 +902,28 @@ class SpotifyLyricsClient {
           isPlaying: playing,
         ),
         trackId: trackId,
+        needsLogin: false,
+        authenticated: true,
+      );
+    } on TimeoutException {
+      return const PlaybackSnapshot(
+        state: PlaybackState(status: 'Spotify unavailable'),
+        authenticated: false,
+      );
+    } on SocketException {
+      return const PlaybackSnapshot(
+        state: PlaybackState(status: 'Spotify unavailable'),
+        authenticated: false,
+      );
+    } on http.ClientException {
+      return const PlaybackSnapshot(
+        state: PlaybackState(status: 'Spotify unavailable'),
+        authenticated: false,
       );
     } catch (_) {
       return const PlaybackSnapshot(
-        state: PlaybackState(status: 'Connect Spotify'),
+        state: PlaybackState(status: 'Spotify unavailable'),
+        authenticated: false,
       );
     }
   }

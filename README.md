@@ -2,7 +2,7 @@
 
 Floating Spotify lyrics app for macOS and Windows.
 
-Current release: v1.1
+Current release: v1.1.0
 
 ## Features
 
