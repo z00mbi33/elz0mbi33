@@ -1,0 +1,87 @@
+name: Windows Prerelease
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to publish
+        required: true
+        default: v1.1.2-windows-test
+  push:
+    tags:
+      - 'v*-windows-test'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build_windows:
+    name: Build and publish Windows prerelease
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Package ZIP
+        shell: pwsh
+        run: |
+          $releaseDir = "build\windows\x64\runner\Release"
+          if (-not (Test-Path $releaseDir)) {
+            $releaseDir = "build\windows\runner\Release"
+          }
+          $artifactDir = "build\windows\artifacts"
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+          $zipPath = Join-Path $artifactDir "elz0mbi33-windows.zip"
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+          Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath $zipPath
+          $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -Path "$zipPath.sha256" -Value "$hash  elz0mbi33-windows.zip" -Encoding ascii
+
+      - name: Publish prerelease
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          name: v1.1.2 Windows test
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          body: |
+            Windows prerelease for the log viewer and playback diagnostics.
+
+            Highlights:
+            - Open Logs viewer from More options
+            - Writes logs beside the executable when possible
+            - Better Spotify/LRCLIB diagnostics and slower polling
+
+            Share the ZIP and the `.log` file when reporting issues.
+          files: |
+            build/windows/artifacts/elz0mbi33-windows.zip
+            build/windows/artifacts/elz0mbi33-windows.zip.sha256
+          token: ${{ secrets.GITHUB_TOKEN }}
