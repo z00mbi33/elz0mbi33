@@ -2,38 +2,101 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:ui';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
-void main() async {
+import 'app_logger.dart';
+import 'log_viewer.dart';
+
+AppLogger? appLogger;
+
+bool _isLogViewerMode(List<String> args) => args.contains('--log-viewer');
+
+String? _logPathFromArgs(List<String> args) {
+  final index = args.indexOf('--log-viewer');
+  if (index == -1 || index + 1 >= args.length) {
+    return null;
+  }
+  return args[index + 1];
+}
+
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
-  final options = WindowOptions(
-    size: Size(380, 160),
-    minimumSize: Size(360, 150),
-    center: true,
-    backgroundColor: Colors.transparent,
-    titleBarStyle: TitleBarStyle.hidden,
-    alwaysOnTop: true,
+  appLogger = await AppLogger.create(path: _isLogViewerMode(args) ? _logPathFromArgs(args) : null);
+
+  FlutterError.onError = (details) {
+    appLogger?.error(
+      'flutter',
+      details.exceptionAsString(),
+      error: details.exception,
+      stackTrace: details.stack,
+    );
+    FlutterError.presentError(details);
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    appLogger?.error('uncaught', error.toString(), error: error, stackTrace: stack);
+    return true;
+  };
+
+  await appLogger?.info(
+    'startup',
+    'version=1.1.2-windows-test platform=${Platform.operatingSystem} mode=${kReleaseMode ? 'release' : 'debug'} logPath=${appLogger?.path} viewer=${_isLogViewerMode(args)}',
   );
-  windowManager.waitUntilReadyToShow(options, () async {
-    await windowManager.show();
-    await windowManager.focus();
-    await windowManager.setOpacity(0.82);
-    await windowManager.setAlwaysOnTop(true);
-    if (Platform.isMacOS) {
-      await windowManager.setVisibleOnAllWorkspaces(
-        true,
-        visibleOnFullScreen: true,
-      );
-    }
+
+  if (_isLogViewerMode(args)) {
+    final logPath = _logPathFromArgs(args) ?? appLogger!.path;
+    windowManager.waitUntilReadyToShow(
+      const WindowOptions(
+        size: Size(980, 720),
+        minimumSize: Size(720, 480),
+        center: true,
+        backgroundColor: Colors.black,
+        titleBarStyle: TitleBarStyle.normal,
+        alwaysOnTop: false,
+      ),
+      () async {
+        await windowManager.show();
+        await windowManager.focus();
+      },
+    );
+    runApp(LogViewerApp(logPath: logPath));
+    return;
+  }
+
+  windowManager.waitUntilReadyToShow(
+    const WindowOptions(
+      size: Size(380, 160),
+      minimumSize: Size(360, 150),
+      center: true,
+      backgroundColor: Colors.transparent,
+      titleBarStyle: TitleBarStyle.hidden,
+      alwaysOnTop: true,
+    ),
+    () async {
+      await windowManager.show();
+      await windowManager.focus();
+      await windowManager.setOpacity(0.82);
+      await windowManager.setAlwaysOnTop(true);
+      if (Platform.isMacOS) {
+        await windowManager.setVisibleOnAllWorkspaces(
+          true,
+          visibleOnFullScreen: true,
+        );
+      }
+    },
+  );
+  runZonedGuarded(() => runApp(const Elz0mbi33App()), (error, stack) {
+    appLogger?.error('zone', error.toString(), error: error, stackTrace: stack);
   });
-  runApp(const Elz0mbi33App());
 }
 
 class Elz0mbi33App extends StatelessWidget {
@@ -96,7 +159,7 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
       _clientIdController.text = prefs.getString(_clientIdKey) ?? '';
     });
     _bootstrap();
-    _timer = Timer.periodic(const Duration(milliseconds: 500), (_) => _load());
+    _timer = Timer.periodic(const Duration(seconds: 2), (_) => _load());
   }
 
   Future<void> _bootstrap() async {
@@ -132,8 +195,10 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
       if (!mounted) return;
       setState(() {
         _state = next.state;
-        _trackId = next.trackId;
-        _lyrics = next.lyrics;
+        if (!next.preserveCurrentTrack) {
+          _trackId = next.trackId;
+          _lyrics = next.lyrics;
+        }
         if (next.needsLogin == true) {
           _authenticated = false;
           _showLoginForm = true;
@@ -206,6 +271,7 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
 
     try {
       final status = await _auth.login(clientId: clientId);
+      await appLogger?.info('auth', 'login completed');
       if (!mounted) return;
       setState(() {
         _state = PlaybackState(status: status);
@@ -217,6 +283,7 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
       });
       await _setPlayerWindowSize();
     } catch (error) {
+      await appLogger?.error('auth', 'login failed', error: error);
       if (!mounted) return;
       setState(() {
         _state = PlaybackState(status: 'Login failed: $error');
@@ -241,7 +308,7 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
     final statusText = _state.track == null ? (_loginError ?? body) : body;
     final paused = _state.isPaused;
     final trackLabel = _state.track == null
-        ? 'Spotify not connected'
+        ? (_authenticated ? _state.status : 'Spotify not connected')
         : _state.track!;
     final showLoginForm =
         _authChecked &&
@@ -533,16 +600,29 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
             ],
           ),
         ),
+        PopupMenuItem<String>(
+          value: 'logs',
+          child: Row(
+            children: [
+              Icon(Icons.article_outlined),
+              SizedBox(width: 8),
+              Text('Open logs'),
+            ],
+          ),
+        ),
       ],
     );
 
     if (selected == 'reconnect') {
       await _reconnectSpotify();
+    } else if (selected == 'logs') {
+      await _openLogs();
     }
   }
 
   Future<void> _reconnectSpotify() async {
     await _auth.clearSession();
+    await appLogger?.warning('auth', 'session cleared by user');
     if (!mounted) return;
     setState(() {
       _authenticated = false;
@@ -554,6 +634,19 @@ class FloatingLyricsViewState extends State<FloatingLyricsView>
     });
     await _setLoginWindowSize();
     _clientIdFocusNode.requestFocus();
+  }
+
+  Future<void> _openLogs() async {
+    final logPath = appLogger?.path;
+    if (logPath == null) {
+      return;
+    }
+    await appLogger?.info('ui', 'opening log viewer');
+    await Process.start(
+      Platform.resolvedExecutable,
+      ['--log-viewer', logPath],
+      mode: ProcessStartMode.detached,
+    );
   }
 
   Future<void> _closeWindow() async {
@@ -583,6 +676,7 @@ class PlaybackSnapshot {
   final Lyrics? lyrics;
   final bool? needsLogin;
   final bool? authenticated;
+  final bool preserveCurrentTrack;
 
   const PlaybackSnapshot({
     required this.state,
@@ -590,6 +684,7 @@ class PlaybackSnapshot {
     this.lyrics,
     this.needsLogin,
     this.authenticated,
+    this.preserveCurrentTrack = false,
   });
 }
 
@@ -597,21 +692,23 @@ class SpotifyAccessTokenResult {
   final String? token;
   final bool authenticated;
   final bool needsLogin;
+  final bool hasToken;
 
   const SpotifyAccessTokenResult._(
     this.token,
     this.authenticated,
     this.needsLogin,
+    this.hasToken,
   );
 
   const SpotifyAccessTokenResult.authenticated(String token)
-      : this._(token, true, false);
+      : this._(token, true, false, true);
 
   const SpotifyAccessTokenResult.needsLogin()
-      : this._(null, false, true);
+      : this._(null, false, true, false);
 
   const SpotifyAccessTokenResult.unavailable()
-      : this._(null, false, false);
+      : this._(null, false, false, false);
 }
 
 class SpotifyAuthManager {
@@ -715,6 +812,7 @@ class SpotifyAuthManager {
         mode: LaunchMode.externalApplication,
       );
       if (!launched) {
+        await appLogger?.error('auth', 'could not open browser');
         throw 'could not open the browser';
       }
 
@@ -743,6 +841,7 @@ class SpotifyAuthManager {
       )
           .timeout(_tokenTimeout);
       if (tokenResponse.statusCode < 200 || tokenResponse.statusCode >= 300) {
+        await appLogger?.error('auth', 'token exchange failed status=${tokenResponse.statusCode}');
         throw 'token exchange failed (${tokenResponse.statusCode}): ${tokenResponse.body}';
       }
 
@@ -762,6 +861,7 @@ class SpotifyAuthManager {
         _expiryKey,
         DateTime.now().add(Duration(seconds: expiresIn)).millisecondsSinceEpoch,
       );
+      await appLogger?.info('auth', 'Spotify connected');
       return 'Spotify connected';
     } finally {
       await server.close(force: true);
@@ -774,6 +874,7 @@ class SpotifyAuthManager {
     if (token != null && token.isNotEmpty) {
       final expiry = prefs.getInt(_expiryKey) ?? 0;
       if (DateTime.now().millisecondsSinceEpoch < expiry - 30000) {
+        await appLogger?.debug('auth', 'cached access token is valid');
         return SpotifyAccessTokenResult.authenticated(token);
       }
     }
@@ -785,10 +886,12 @@ class SpotifyAuthManager {
         clientId == null ||
         clientId.isEmpty) {
       await clearSession();
+      await appLogger?.warning('auth', 'missing cached credentials; login required');
       return const SpotifyAccessTokenResult.needsLogin();
     }
 
     try {
+      await appLogger?.debug('auth', 'refreshing access token');
       final response = await http
           .post(
         Uri.https('accounts.spotify.com', '/api/token'),
@@ -802,15 +905,18 @@ class SpotifyAuthManager {
           .timeout(_tokenTimeout);
       if (response.statusCode == 400 || response.statusCode == 401) {
         await clearSession();
+        await appLogger?.warning('auth', 'refresh token rejected; login required');
         return const SpotifyAccessTokenResult.needsLogin();
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        await appLogger?.warning('auth', 'refresh temporarily unavailable status=${response.statusCode}');
         return const SpotifyAccessTokenResult.unavailable();
       }
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final next = body['access_token'] as String?;
       if (next == null || next.isEmpty) {
+        await appLogger?.warning('auth', 'refresh response missing access token');
         return const SpotifyAccessTokenResult.unavailable();
       }
 
@@ -824,12 +930,16 @@ class SpotifyAuthManager {
         _expiryKey,
         DateTime.now().add(Duration(seconds: expiresIn)).millisecondsSinceEpoch,
       );
+      await appLogger?.debug('auth', 'access token refreshed');
       return SpotifyAccessTokenResult.authenticated(next);
-    } on TimeoutException {
+    } on TimeoutException catch (error) {
+      await appLogger?.warning('auth', 'refresh timeout', error: error);
       return const SpotifyAccessTokenResult.unavailable();
-    } on SocketException {
+    } on SocketException catch (error) {
+      await appLogger?.warning('auth', 'refresh socket error', error: error);
       return const SpotifyAccessTokenResult.unavailable();
-    } on http.ClientException {
+    } on http.ClientException catch (error) {
+      await appLogger?.warning('auth', 'refresh client error', error: error);
       return const SpotifyAccessTokenResult.unavailable();
     }
   }
@@ -855,12 +965,21 @@ class SpotifyLyricsClient {
   static const _maxLyricsFailures = 3;
   static const _lyricsRetryDelay = Duration(seconds: 15);
   static const _spotifyTimeout = Duration(seconds: 8);
+  DateTime _spotifyRetryUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
   Future<PlaybackSnapshot> snapshot({
     required SpotifyAuthManager auth,
     required String? currentTrackId,
     required Lyrics? cachedLyrics,
   }) async {
+    if (DateTime.now().isBefore(_spotifyRetryUntil)) {
+      return const PlaybackSnapshot(
+        state: PlaybackState(status: 'Spotify temporarily unavailable'),
+        authenticated: true,
+        preserveCurrentTrack: true,
+      );
+    }
+
     final session = await auth.accessToken();
     if (session.needsLogin) {
       return const PlaybackSnapshot(
@@ -871,6 +990,13 @@ class SpotifyLyricsClient {
     }
     final token = session.token;
     if (token == null || token.isEmpty) {
+      if (session.hasToken) {
+        return const PlaybackSnapshot(
+          state: PlaybackState(status: 'Spotify temporarily unavailable'),
+          authenticated: true,
+          preserveCurrentTrack: true,
+        );
+      }
       return const PlaybackSnapshot(
         state: PlaybackState(status: 'Spotify unavailable'),
         authenticated: false,
@@ -878,32 +1004,53 @@ class SpotifyLyricsClient {
     }
 
     try {
+      await appLogger?.debug('spotify', 'polling playback state');
       final response = await http
           .get(
-        Uri.parse('https://api.spotify.com/v1/me/player/currently-playing'),
+        Uri.parse('https://api.spotify.com/v1/me/player?additional_types=track'),
         headers: {'Authorization': 'Bearer $token'},
       )
           .timeout(_spotifyTimeout);
       if (response.statusCode == 204) {
         return const PlaybackSnapshot(
-          state: PlaybackState(status: 'No track playing'),
+          state: PlaybackState(status: 'Spotify connected · no track playing'),
           needsLogin: false,
           authenticated: true,
         );
       }
       if (response.statusCode == 401) {
         await auth.clearSession();
+        await appLogger?.warning('spotify', 'playback auth rejected');
         return const PlaybackSnapshot(
           state: PlaybackState(status: 'Connect Spotify'),
           needsLogin: true,
           authenticated: false,
         );
       }
-      if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (response.statusCode == 429) {
+        final retryAfter = int.tryParse(response.headers['retry-after'] ?? '') ?? 5;
+        _spotifyRetryUntil = DateTime.now().add(Duration(seconds: retryAfter));
+        await appLogger?.warning('spotify', 'rate limited; retry after ${retryAfter}s');
         return const PlaybackSnapshot(
-          state: PlaybackState(status: 'Lyrics unavailable'),
-          needsLogin: false,
+          state: PlaybackState(status: 'Spotify rate limited'),
           authenticated: true,
+          preserveCurrentTrack: true,
+        );
+      }
+      if (response.statusCode == 403) {
+        await appLogger?.warning('spotify', 'playback forbidden status=403');
+        return const PlaybackSnapshot(
+          state: PlaybackState(status: 'Spotify access blocked'),
+          authenticated: true,
+          preserveCurrentTrack: true,
+        );
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        await appLogger?.warning('spotify', 'playback unavailable status=${response.statusCode}');
+        return const PlaybackSnapshot(
+          state: PlaybackState(status: 'Spotify temporarily unavailable'),
+          authenticated: true,
+          preserveCurrentTrack: true,
         );
       }
 
@@ -911,12 +1058,13 @@ class SpotifyLyricsClient {
       final item = data['item'] as Map<String, dynamic>?;
       if (item == null) {
         return const PlaybackSnapshot(
-          state: PlaybackState(status: 'No track playing'),
+          state: PlaybackState(status: 'Spotify connected · no track playing'),
           needsLogin: false,
           authenticated: true,
         );
       }
 
+      final type = item['type'] as String? ?? 'track';
       final title = item['name'] as String? ?? '';
       final trackId = item['id'] as String?;
       final artists =
@@ -924,13 +1072,32 @@ class SpotifyLyricsClient {
       final artist = artists.isNotEmpty
           ? (artists.first['name'] as String? ?? '')
           : '';
-      final track = '$artist — $title'.trim();
+      final track = type == 'episode' ? title : '$artist — $title'.trim();
       final playing = data['is_playing'] as bool? ?? false;
       final progress = (data['progress_ms'] as num?)?.toDouble() ?? 0;
+      final device = data['device'] as Map<String, dynamic>?;
+      await appLogger?.debug(
+        'spotify',
+        'status=${response.statusCode} type=$type playing=$playing trackId=${trackId ?? 'none'} device=${device?['name'] ?? 'unknown'}',
+      );
+
+      if (type != 'track') {
+        return PlaybackSnapshot(
+          state: PlaybackState(
+            status: type == 'episode' ? 'Podcast episode playing' : 'Lyrics unavailable',
+            track: track,
+            isPlaying: playing,
+          ),
+          trackId: trackId,
+          needsLogin: false,
+          authenticated: true,
+        );
+      }
+
       if (trackId == null || trackId.isEmpty) {
         return PlaybackSnapshot(
           state: PlaybackState(
-            status: 'Lyrics unavailable',
+            status: 'Spotify connected',
             track: track,
             isPlaying: playing,
           ),
@@ -976,6 +1143,7 @@ class SpotifyLyricsClient {
       }
 
       if (_loadingTracks.add(trackId)) {
+        await appLogger?.debug('lyrics', 'priming lyrics for $trackId');
         unawaited(_primeLyrics(trackId: trackId, title: title, artist: artist));
       }
 
@@ -989,25 +1157,37 @@ class SpotifyLyricsClient {
         needsLogin: false,
         authenticated: true,
       );
-    } on TimeoutException {
+    } on TimeoutException catch (error) {
+      _spotifyRetryUntil = DateTime.now().add(const Duration(seconds: 5));
+      await appLogger?.warning('spotify', 'playback timeout', error: error);
       return const PlaybackSnapshot(
-        state: PlaybackState(status: 'Spotify unavailable'),
-        authenticated: false,
+        state: PlaybackState(status: 'Spotify temporarily unavailable'),
+        authenticated: true,
+        preserveCurrentTrack: true,
       );
-    } on SocketException {
+    } on SocketException catch (error) {
+      _spotifyRetryUntil = DateTime.now().add(const Duration(seconds: 5));
+      await appLogger?.warning('spotify', 'playback socket error', error: error);
       return const PlaybackSnapshot(
-        state: PlaybackState(status: 'Spotify unavailable'),
-        authenticated: false,
+        state: PlaybackState(status: 'Spotify temporarily unavailable'),
+        authenticated: true,
+        preserveCurrentTrack: true,
       );
-    } on http.ClientException {
+    } on http.ClientException catch (error) {
+      _spotifyRetryUntil = DateTime.now().add(const Duration(seconds: 5));
+      await appLogger?.warning('spotify', 'playback client error', error: error);
       return const PlaybackSnapshot(
-        state: PlaybackState(status: 'Spotify unavailable'),
-        authenticated: false,
+        state: PlaybackState(status: 'Spotify temporarily unavailable'),
+        authenticated: true,
+        preserveCurrentTrack: true,
       );
-    } catch (_) {
+    } catch (error) {
+      _spotifyRetryUntil = DateTime.now().add(const Duration(seconds: 5));
+      await appLogger?.warning('spotify', 'playback parse failure', error: error);
       return const PlaybackSnapshot(
-        state: PlaybackState(status: 'Spotify unavailable'),
-        authenticated: false,
+        state: PlaybackState(status: 'Spotify temporarily unavailable'),
+        authenticated: true,
+        preserveCurrentTrack: true,
       );
     }
   }
@@ -1019,13 +1199,17 @@ class SpotifyLyricsClient {
   }) async {
     try {
       final lyrics = await _fetchLyrics(title: title, artist: artist);
-      if (lyrics != null && lyrics.lines.isNotEmpty) {
+      if (lyrics != null) {
         _lyricsCache[trackId] = lyrics;
         _clearLyricsRetryState(trackId);
+        await appLogger?.info('lyrics', 'lyrics loaded for $trackId');
         onLyricsReady?.call();
       } else {
         _recordLyricsFailure(trackId);
       }
+    } catch (error) {
+      await appLogger?.warning('lyrics', 'lookup failed for $trackId', error: error);
+      _recordLyricsFailure(trackId);
     } finally {
       _loadingTracks.remove(trackId);
     }
@@ -1074,6 +1258,10 @@ class SpotifyLyricsClient {
     if (response.statusCode == 404) {
       return null;
     }
+    if (response.statusCode == 429) {
+      await appLogger?.warning('lyrics', 'rate limited for $path');
+      return null;
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       return null;
     }
@@ -1095,8 +1283,9 @@ class SpotifyLyricsClient {
   Lyrics? _lyricsFromMap(Map<String, dynamic> json) {
     final synced = (json['syncedLyrics'] as String?)?.trim() ?? '';
     final plain = (json['plainLyrics'] as String?)?.trim() ?? '';
-    if (synced.isEmpty && plain.isEmpty) return null;
-    return Lyrics.parse(synced.isNotEmpty ? synced : plain);
+    if (synced.isNotEmpty) return Lyrics.parse(synced);
+    if (plain.isNotEmpty) return Lyrics.parse(plain);
+    return null;
   }
 }
 
@@ -1114,29 +1303,36 @@ class LRCLIBRateLimiter {
 
 class Lyrics {
   final List<LyricLine> lines;
+  final String? plainText;
 
-  Lyrics(this.lines);
+  Lyrics._(this.lines, this.plainText);
 
   factory Lyrics.parse(String text) {
     final lines = <LyricLine>[];
     for (final raw in text.split(RegExp(r'\r?\n'))) {
-      final start = raw.indexOf('[');
-      final end = raw.indexOf(']');
-      if (start != 0 || end <= 0) continue;
-      final tag = raw.substring(1, end);
-      final body = raw.substring(end + 1).trim();
-      final parts = tag.split(':');
-      if (parts.length != 2) continue;
-      final min = double.tryParse(parts[0]);
-      final sec = double.tryParse(parts[1]);
-      if (min == null || sec == null || body.isEmpty) continue;
-      lines.add(LyricLine((min * 60 + sec) * 1000, body));
+      final tags = RegExp(r'\[(\d{1,2}):(\d{2})(?:[\.,](\d{1,3}))?\]').allMatches(raw).toList();
+      if (tags.isEmpty) continue;
+      final body = raw.replaceAll(RegExp(r'^(?:\[\d{1,2}:\d{2}(?:[\.,]\d{1,3})?\])+'), '').trim();
+      if (body.isEmpty) continue;
+      for (final tag in tags) {
+        final min = double.tryParse(tag.group(1) ?? '');
+        final sec = double.tryParse('${tag.group(2)}.${(tag.group(3) ?? '0').padRight(3, '0')}');
+        if (min == null || sec == null) continue;
+        lines.add(LyricLine((min * 60 + sec) * 1000, body));
+      }
     }
-    lines.sort((a, b) => a.ms.compareTo(b.ms));
-    return Lyrics(lines);
+    if (lines.isNotEmpty) {
+      lines.sort((a, b) => a.ms.compareTo(b.ms));
+      return Lyrics._(lines, null);
+    }
+    final plain = text.trim();
+    return Lyrics._(const [], plain.isEmpty ? null : plain);
   }
 
   String? currentLine({required double progressMs}) {
+    if (plainText != null) {
+      return plainText;
+    }
     LyricLine? current;
     for (final line in lines) {
       if (line.ms <= progressMs) current = line;

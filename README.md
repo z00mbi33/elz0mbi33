@@ -2,7 +2,7 @@
 
 Floating Spotify lyrics app for macOS and Windows.
 
-Current release: v1.1.1
+Current release: v1.1.2-windows-test
 
 ## Features
 
@@ -38,3 +38,6 @@ flutter run -d windows
 - Spotify Premium may be required for playback-state access.
 - Lyrics depend on LRCLIB availability.
 - If lyrics are unavailable, the app shows a fallback status and retries later.
+- Logs are written to `elz0mbi33.log` next to the app executable when possible.
+- Open **More options → Open logs** to view a live log window.
+- If the app folder is not writable, logs fall back to the local app data log folder on Windows.

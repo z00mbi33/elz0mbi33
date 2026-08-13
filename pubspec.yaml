@@ -1,7 +1,7 @@
 name: elz0mbi33
 description: "Floating Spotify lyrics app"
 publish_to: 'none'
-version: 1.1.1+2
+version: 1.1.2-windows-test+3
 
 environment:
   sdk: ^3.12.2
